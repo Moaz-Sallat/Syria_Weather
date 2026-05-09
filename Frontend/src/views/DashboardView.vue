@@ -52,6 +52,7 @@ import Feature from 'ol/Feature'
 import Point from 'ol/geom/Point'
 import { fromLonLat } from 'ol/proj'
 import { Style, Circle, Fill, Stroke } from 'ol/style'
+import GeoJSON from 'ol/format/GeoJSON'
 
 const selectedCity = ref(null)
 const weather = ref(null)
@@ -76,9 +77,49 @@ const cities = [
   { id: 14, name: 'الرقة', lon: 39.0193, lat: 35.9528 },
 ]
 
+let selectedGovernorateFeature = null
+
+const defaultGovernorateStyle = new Style({
+  fill: new Fill({
+    color: 'rgba(0, 0, 0, 0.01)',
+  }),
+  stroke: new Stroke({
+    color: 'rgba(0, 0, 0, 0)',
+    width: 1,
+  }),
+})
+
+const selectedGovernorateStyle = new Style({
+  fill: new Fill({
+    color: 'rgba(229, 57, 53, 0.25)',
+  }),
+  stroke: new Stroke({
+    color: '#e53935',
+    width: 4,
+  }),
+})
+
+const governoratesSource = new VectorSource({
+  url: '/data/syr_admin_boundaries.geojson/syr_admin1.geojson',
+  format: new GeoJSON({
+    dataProjection: 'EPSG:4326',
+    featureProjection: 'EPSG:3857',
+  }),
+})
+
+const governoratesLayer = new VectorLayer({
+  source: governoratesSource,
+  style: defaultGovernorateStyle,
+})
+
 function closeCard() {
   selectedCity.value = null
   weather.value = null
+
+  if (selectedGovernorateFeature) {
+    selectedGovernorateFeature.setStyle(defaultGovernorateStyle)
+    selectedGovernorateFeature = null
+  }
 }
 
 async function fetchWeather(city) {
@@ -90,7 +131,6 @@ async function fetchWeather(city) {
     const result = await response.json()
 
     if (!response.ok) {
-      console.error(result)
       weather.value = null
       return
     }
@@ -102,6 +142,23 @@ async function fetchWeather(city) {
   } finally {
     loadingWeather.value = false
   }
+}
+
+function getGovernorateName(feature) {
+  const props = feature.getProperties()
+
+  return props.adm1_name1 || props.adm1_name || 'محافظة غير معروفة'
+}
+
+function findCityByGovernorateName(govName) {
+  const normalizedName = String(govName).trim()
+
+  return cities.find(
+    (city) =>
+      city.name.trim() === normalizedName ||
+      normalizedName.includes(city.name) ||
+      city.name.includes(normalizedName),
+  )
 }
 
 onMounted(() => {
@@ -117,7 +174,7 @@ onMounted(() => {
           radius: 8,
           fill: new Fill({ color: '#e53935' }),
           stroke: new Stroke({
-            color: 'white',
+            color: '#ffffff',
             width: 3,
           }),
         }),
@@ -139,6 +196,7 @@ onMounted(() => {
       new TileLayer({
         source: new OSM(),
       }),
+      governoratesLayer,
       citiesLayer,
     ],
     view: new View({
@@ -150,17 +208,51 @@ onMounted(() => {
   })
 
   map.on('click', (event) => {
-    map.forEachFeatureAtPixel(event.pixel, (feature) => {
-      const city = feature.get('cityData')
+    let clickedGovernorate = null
 
+    map.forEachFeatureAtPixel(
+      event.pixel,
+      (feature, layer) => {
+        if (layer === governoratesLayer) {
+          clickedGovernorate = feature
+          return true
+        }
+
+        return false
+      },
+      {
+        hitTolerance: 3,
+      },
+    )
+
+    if (!clickedGovernorate) return
+
+    if (selectedGovernorateFeature) {
+      selectedGovernorateFeature.setStyle(defaultGovernorateStyle)
+    }
+
+    selectedGovernorateFeature = clickedGovernorate
+    clickedGovernorate.setStyle(selectedGovernorateStyle)
+
+    const govName = getGovernorateName(clickedGovernorate)
+    const city = findCityByGovernorateName(govName)
+
+    if (city) {
       selectedCity.value = city
       fetchWeather(city)
+    } else {
+      selectedCity.value = {
+        name: govName,
+        lon: '-',
+        lat: '-',
+      }
+      weather.value = null
+    }
 
-      map.getView().animate({
-        center: fromLonLat([city.lon, city.lat]),
-        zoom: 9,
-        duration: 900,
-      })
+    map.getView().fit(clickedGovernorate.getGeometry().getExtent(), {
+      padding: [90, 90, 90, 90],
+      duration: 700,
+      maxZoom: 8,
     })
   })
 })

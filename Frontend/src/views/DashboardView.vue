@@ -2,6 +2,26 @@
   <div class="dashboard">
     <div class="header-row">
       <h2>خريطة سوريا</h2>
+      <div class="system-status">
+  <span
+    class="status-dot"
+    :class="{
+      online: systemStatus === 'online',
+      offline: systemStatus === 'offline',
+      checking: systemStatus === 'checking',
+    }"
+  ></span>
+
+  <span class="status-text">
+    {{
+      systemStatus === 'online'
+        ? 'النظام يعمل'
+        : systemStatus === 'offline'
+        ? 'النظام متوقف'
+        : 'جاري التحقق...'
+    }}
+  </span>
+</div>
 
       <div class="search-box">
         <input
@@ -39,16 +59,17 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import SyriaMap from '@/components/map/SyriaMap.vue'
 import WeatherCard from '@/components/map/WeatherCard.vue'
+
 
 const selectedCity = ref(null)
 const weather = ref(null)
 const loadingWeather = ref(false)
 const searchText = ref('')
 const syriaMapRef = ref(null)
-
+const systemStatus = ref('checking')
 const API_URL = 'http://127.0.0.1:8000'
 
 const cities = [
@@ -75,7 +96,25 @@ const filteredCities = computed(() => {
 
   return cities.filter((city) => city.name.includes(value))
 })
+async function checkSystemHealth() {
+  try {
+    const response = await fetch(`${API_URL}/health`)
 
+    if (!response.ok) {
+      systemStatus.value = 'offline'
+      return
+    }
+
+    const result = await response.json()
+
+    systemStatus.value =
+      result.status === 'ok'
+        ? 'online'
+        : 'offline'
+  } catch (error) {
+    systemStatus.value = 'offline'
+  }
+}
 async function handleSelectCity(city) {
   selectedCity.value = city
   weather.value = null
@@ -107,12 +146,55 @@ function closeCard() {
   selectedCity.value = null
   weather.value = null
 }
+onMounted(() => {
+  checkSystemHealth()
+
+  setInterval(() => {
+    checkSystemHealth()
+  }, 10000)
+})
 </script>
 
 <style scoped>
 .dashboard {
   direction: rtl;
   font-family: Arial, sans-serif;
+}
+.system-status {
+  position: absolute;
+  right: 25px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.status-dot.online {
+  background: #2e7d32;
+  box-shadow: 0 0 10px #2e7d32;
+}
+
+.status-dot.offline {
+  background: #d32f2f;
+  box-shadow: 0 0 10px #d32f2f;
+}
+
+.status-dot.checking {
+  background: #f9a825;
+  box-shadow: 0 0 10px #f9a825;
+}
+
+.status-text {
+  font-weight: bold;
+  color: #333;
 }
 
 .header-row {
@@ -121,6 +203,7 @@ function closeCard() {
   align-items: center;
   justify-content: center;
   margin: 12px 0;
+  height: 50px;
 }
 
 h2 {

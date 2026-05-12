@@ -10,7 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 app = FastAPI(title="Syria Weather Map API")
-
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "message": "Backend is running"
+    }
 # السماح للفرونت بالاتصال مع الباك
 app.add_middleware(
     CORSMiddleware,

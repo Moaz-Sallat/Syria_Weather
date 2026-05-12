@@ -46,7 +46,8 @@ const cities = [
 
 let map = null
 let selectedGovernorateFeature = null
-
+let hoveredGovernorateFeature = null
+let lastHoveredGovernorateName = null
 const defaultGovernorateStyle = new Style({
   fill: new Fill({
     color: 'rgba(0, 0, 0, 0.01)',
@@ -56,7 +57,15 @@ const defaultGovernorateStyle = new Style({
     width: 1,
   }),
 })
-
+const hoverGovernorateStyle = new Style({
+  fill: new Fill({
+    color: 'rgba(30, 136, 229, 0.18)',
+  }),
+  stroke: new Stroke({
+    color: '#1e88e5',
+    width: 3,
+  }),
+})
 const selectedGovernorateStyle = new Style({
   fill: new Fill({
     color: 'rgba(229, 57, 53, 0.25)',
@@ -201,6 +210,61 @@ onMounted(() => {
 
     selectGovernorate(clickedGovernorate)
   })
+map.on('pointermove', (event) => {
+  if (event.dragging) return
+
+  let hoveredFeature = null
+
+  map.forEachFeatureAtPixel(
+    event.pixel,
+    (feature, layer) => {
+      if (layer === governoratesLayer) {
+        hoveredFeature = feature
+        return true
+      }
+
+      return false
+    },
+    {
+      hitTolerance: 3,
+    },
+  )
+
+  if (
+    hoveredGovernorateFeature &&
+    hoveredGovernorateFeature !== selectedGovernorateFeature
+  ) {
+    hoveredGovernorateFeature.setStyle(defaultGovernorateStyle)
+  }
+
+  hoveredGovernorateFeature = hoveredFeature
+
+  if (
+    hoveredFeature &&
+    hoveredFeature !== selectedGovernorateFeature
+  ) {
+    hoveredFeature.setStyle(hoverGovernorateStyle)
+
+  const govName = getGovernorateName(hoveredFeature)
+
+if (govName !== lastHoveredGovernorateName) {
+  lastHoveredGovernorateName = govName
+
+  const city = findCityByGovernorateName(govName)
+
+  if (city) {
+    emit('select-city', city)
+  }
+}
+  }
+
+  map.getTargetElement().style.cursor = hoveredFeature
+    ? 'pointer'
+    : ''
+    if (!hoveredFeature) {
+  lastHoveredGovernorateName = null
+}
+})
 })
 
 watch(

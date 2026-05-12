@@ -1,9 +1,15 @@
 <template>
-  <div id="map"></div>
+  <div class="map-wrapper">
+    <LayerControl 
+      :activeLayer="activeLayer" 
+      @change-layer="handleLayerChange" 
+    />
+    
+    <div id="map" ref="mapElement"></div>
+  </div>
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue'
 
 import 'ol/ol.css'
 import Map from 'ol/Map'
@@ -14,10 +20,12 @@ import OSM from 'ol/source/OSM'
 import VectorSource from 'ol/source/Vector'
 import Feature from 'ol/Feature'
 import Point from 'ol/geom/Point'
+import XYZ from 'ol/source/XYZ'
 import { fromLonLat } from 'ol/proj'
 import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
-
+import { ref, onMounted, watch } from 'vue';
+import LayerControl from '@/components/map/LayerControl.vue';
 const props = defineProps({
   selectedCity: {
     type: Object,
@@ -291,11 +299,46 @@ function selectCityFromSearch(city) {
 defineExpose({
   selectCityFromSearch,
 })
+
+
+const activeLayer = ref('none');
+let weatherLayer = null; 
+
+const handleLayerChange = (layerType) => {
+  console.log("تغيير الطبقة إلى:", layerType); 
+  activeLayer.value = layerType;
+
+  if (weatherLayer) {
+    map.removeLayer(weatherLayer);
+    weatherLayer = null;
+  }
+
+  // 2. إذا كانت الخريطة عادية، نتوقف
+  if (layerType === 'none') return;
+
+  const API_KEY = 'YOUR_OPENWEATHER_API_KEY'; 
+  
+  weatherLayer = new TileLayer({
+    source: new XYZ({
+      url: `https://tile.openweathermap.org/map/${layerType}/{z}/{x}/{y}.png?appid=${API_KEY}`,
+    }),
+    zIndex: 1,
+    opacity: 0.7 // شفافية الطبقة
+  });
+
+  map.addLayer(weatherLayer);
+};
 </script>
 
 <style scoped>
-#map {
+.map-wrapper {
+  position: relative; 
   width: 100%;
   height: 85vh;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
 }
 </style>

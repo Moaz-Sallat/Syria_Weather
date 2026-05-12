@@ -117,13 +117,16 @@ function findCityByGovernorateName(govName) {
   })
 }
 
-function clearSelectedGovernorate() {
+function clearSelectedGovernorate(shouldEmit = false) {
   if (selectedGovernorateFeature) {
     selectedGovernorateFeature.setStyle(defaultGovernorateStyle)
     selectedGovernorateFeature = null
   }
-}
 
+  if (shouldEmit) {
+    emit('select-city', null)
+  }
+}
 function selectGovernorate(feature) {
   clearSelectedGovernorate()
 
@@ -221,6 +224,12 @@ onMounted(() => {
 map.on('pointermove', (event) => {
   if (event.dragging) return
 
+  // إذا في محافظة محددة بالضغط أو البحث، لا تعمل hover أبداً
+  if (selectedGovernorateFeature) {
+    map.getTargetElement().style.cursor = 'pointer'
+    return
+  }
+
   let hoveredFeature = null
 
   map.forEachFeatureAtPixel(
@@ -240,22 +249,26 @@ map.on('pointermove', (event) => {
 
   if (
     hoveredGovernorateFeature &&
-    hoveredGovernorateFeature !== selectedGovernorateFeature
+    hoveredGovernorateFeature !== hoveredFeature
   ) {
     hoveredGovernorateFeature.setStyle(defaultGovernorateStyle)
   }
 
   hoveredGovernorateFeature = hoveredFeature
 
-  if (
-    hoveredFeature &&
-    hoveredFeature !== selectedGovernorateFeature
-  ) {
-    hoveredFeature.setStyle(hoverGovernorateStyle)
+  if (!hoveredFeature) {
+    map.getTargetElement().style.cursor = ''
+    lastHoveredGovernorateName = null
+    return
+  }
+
+  map.getTargetElement().style.cursor = 'pointer'
+  hoveredFeature.setStyle(hoverGovernorateStyle)
 
   const govName = getGovernorateName(hoveredFeature)
 
-if (govName !== lastHoveredGovernorateName) {
+  if (govName === lastHoveredGovernorateName) return
+
   lastHoveredGovernorateName = govName
 
   const city = findCityByGovernorateName(govName)
@@ -263,15 +276,6 @@ if (govName !== lastHoveredGovernorateName) {
   if (city) {
     emit('select-city', city)
   }
-}
-  }
-
-  map.getTargetElement().style.cursor = hoveredFeature
-    ? 'pointer'
-    : ''
-    if (!hoveredFeature) {
-  lastHoveredGovernorateName = null
-}
 })
 })
 

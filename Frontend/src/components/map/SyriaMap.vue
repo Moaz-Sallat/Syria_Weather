@@ -268,21 +268,6 @@ onMounted(() => {
   void resolveOwmAppId()
 })
 
-onUnmounted(() => {
-  if (weatherLayer && map) {
-    map.removeLayer(weatherLayer)
-    weatherLayer = null
-  }
-  if (map) {
-    map.setTarget(undefined)
-    map.dispose()
-    map = null
-  }
-  selectedGovernorateFeature = null
-  hoveredGovernorateFeature = null
-  lastHoveredGovernorateName = null
-})
-
 watch(
   () => props.selectedCity,
   (newCity) => {
@@ -371,6 +356,21 @@ const handleLayerChange = async (layerType) => {
 
   map.addLayer(weatherLayer)
 }
+
+onUnmounted(() => {
+  if (weatherLayer && map) {
+    map.removeLayer(weatherLayer)
+    weatherLayer = null
+  }
+  if (map) {
+    map.setTarget(undefined)
+    map.dispose()
+    map = null
+  }
+  selectedGovernorateFeature = null
+  hoveredGovernorateFeature = null
+  lastHoveredGovernorateName = null
+})
 </script>
 
 <style scoped>

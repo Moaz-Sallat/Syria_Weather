@@ -63,6 +63,14 @@ def test_connection():
     return status
 
 
+@app.get("/api/config/weather-map")
+def weather_map_tile_key():
+    """مفتاح OpenWeather لبلاط الخريطة الجوية؛ يُستخدم من الواجهة في عنوان البلاط."""
+    if not API_KEY:
+        return {"apiKey": None}
+    return {"apiKey": API_KEY}
+
+
 @app.get("/api/map/cities")
 def get_cities_geojson():
     conn = get_db_connection()

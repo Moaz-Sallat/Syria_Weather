@@ -279,7 +279,9 @@ onMounted(() => {
   if (city) {
     emit('select-city', city)
   }
-})
+  })
+
+  void resolveOwmAppId()
 })
 
 watch(
@@ -308,10 +310,36 @@ defineExpose({
 })
 
 
-const activeLayer = ref('none');
-let weatherLayer = null; 
+const activeLayer = ref('none')
+let weatherLayer = null
 
-const handleLayerChange = (layerType) => {
+/** يُحمّل مرة من الباكند إذا لم يُضبط VITE_OPENWEATHER_API_KEY */
+let owmAppIdCache = undefined
+
+async function resolveOwmAppId() {
+  const fromEnv = import.meta.env.VITE_OPENWEATHER_API_KEY
+  if (fromEnv && String(fromEnv).trim()) {
+    return String(fromEnv).trim()
+  }
+  if (owmAppIdCache !== undefined) {
+    return owmAppIdCache
+  }
+  const base =
+    import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ||
+    'http://127.0.0.1:8000'
+  try {
+    const response = await fetch(`${base}/api/config/weather-map`)
+    const data = response.ok ? await response.json() : {}
+    const key = data?.apiKey != null ? String(data.apiKey).trim() : ''
+    owmAppIdCache = key
+    return key
+  } catch {
+    owmAppIdCache = ''
+    return ''
+  }
+}
+
+const handleLayerChange = async (layerType) => {
   activeLayer.value = layerType
 
   if (!map) return
@@ -323,17 +351,19 @@ const handleLayerChange = (layerType) => {
 
   if (layerType === 'none') return
 
-  const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY
-  if (!API_KEY) {
+  const appId = await resolveOwmAppId()
+  if (!appId) {
     console.warn(
-      'VITE_OPENWEATHER_API_KEY غير مضبوط: أضف المفتاح في Frontend/.env.local',
+      'لا يوجد مفتاح OpenWeather: ضع OPENWEATHER_API_KEY في .env للباكند أو VITE_OPENWEATHER_API_KEY للفرونت، وتأكد أن الباكند يعمل.',
     )
+    activeLayer.value = 'none'
     return
   }
 
   weatherLayer = new TileLayer({
     source: new XYZ({
-      url: `https://tile.openweathermap.org/map/${layerType}/{z}/{x}/{y}.png?appid=${API_KEY}`,
+      url: `https://tile.openweathermap.org/map/${layerType}/{z}/{x}/{y}.png?appid=${appId}`,
+      crossOrigin: 'anonymous',
     }),
     zIndex: 1,
     opacity: 0.72,

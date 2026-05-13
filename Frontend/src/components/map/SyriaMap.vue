@@ -28,6 +28,8 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import LayerControl from '@/components/map/LayerControl.vue'
 import { SYRIA_GOVERNORATES as cities } from '@/data/syriaGovernorates.js'
 import { apiUrl } from '@/config/api.js'
+
+const props = defineProps({
   selectedCity: {
     type: Object,
     default: null,

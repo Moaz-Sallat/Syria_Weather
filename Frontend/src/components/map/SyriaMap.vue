@@ -313,15 +313,15 @@ defineExpose({
 const activeLayer = ref('none')
 let weatherLayer = null
 
-/** يُحمّل مرة من الباكند إذا لم يُضبط VITE_OPENWEATHER_API_KEY */
-let owmAppIdCache = undefined
+/** يُحمّل من الباكند عند غياب VITE_OPENWEATHER_API_KEY؛ يُخزَّن فقط عند نجاح المفتاح */
+let owmAppIdCache = ''
 
 async function resolveOwmAppId() {
   const fromEnv = import.meta.env.VITE_OPENWEATHER_API_KEY
   if (fromEnv && String(fromEnv).trim()) {
     return String(fromEnv).trim()
   }
-  if (owmAppIdCache !== undefined) {
+  if (owmAppIdCache) {
     return owmAppIdCache
   }
   const base =
@@ -331,10 +331,11 @@ async function resolveOwmAppId() {
     const response = await fetch(`${base}/api/config/weather-map`)
     const data = response.ok ? await response.json() : {}
     const key = data?.apiKey != null ? String(data.apiKey).trim() : ''
-    owmAppIdCache = key
+    if (key) {
+      owmAppIdCache = key
+    }
     return key
   } catch {
-    owmAppIdCache = ''
     return ''
   }
 }
@@ -342,7 +343,10 @@ async function resolveOwmAppId() {
 const handleLayerChange = async (layerType) => {
   activeLayer.value = layerType
 
-  if (!map) return
+  if (!map) {
+    activeLayer.value = 'none'
+    return
+  }
 
   if (weatherLayer) {
     map.removeLayer(weatherLayer)

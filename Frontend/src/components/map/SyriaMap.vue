@@ -24,9 +24,10 @@ import XYZ from 'ol/source/XYZ'
 import { fromLonLat } from 'ol/proj'
 import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
-import { ref, onMounted, watch } from 'vue';
-import LayerControl from '@/components/map/LayerControl.vue';
-const props = defineProps({
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import LayerControl from '@/components/map/LayerControl.vue'
+import { SYRIA_GOVERNORATES as cities } from '@/data/syriaGovernorates.js'
+import { apiUrl } from '@/config/api.js'
   selectedCity: {
     type: Object,
     default: null,
@@ -34,23 +35,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['select-city'])
-
-const cities = [
-  { id: 1, name: 'دمشق', lon: 36.2765, lat: 33.5138 },
-  { id: 2, name: 'ريف دمشق', lon: 36.4316, lat: 33.5167 },
-  { id: 3, name: 'حلب', lon: 37.1612, lat: 36.2021 },
-  { id: 4, name: 'حمص', lon: 36.7234, lat: 34.7324 },
-  { id: 5, name: 'حماة', lon: 36.7578, lat: 35.1318 },
-  { id: 6, name: 'اللاذقية', lon: 35.7796, lat: 35.5317 },
-  { id: 7, name: 'طرطوس', lon: 35.8866, lat: 34.8959 },
-  { id: 8, name: 'إدلب', lon: 36.6339, lat: 35.9306 },
-  { id: 9, name: 'درعا', lon: 36.1021, lat: 32.6189 },
-  { id: 10, name: 'السويداء', lon: 36.5695, lat: 32.709 },
-  { id: 11, name: 'القنيطرة', lon: 35.8246, lat: 33.1259 },
-  { id: 12, name: 'دير الزور', lon: 40.1408, lat: 35.3359 },
-  { id: 13, name: 'الحسكة', lon: 40.7477, lat: 36.5079 },
-  { id: 14, name: 'الرقة', lon: 39.0193, lat: 35.9528 },
-]
 
 let map = null
 let selectedGovernorateFeature = null
@@ -284,6 +268,21 @@ onMounted(() => {
   void resolveOwmAppId()
 })
 
+onUnmounted(() => {
+  if (weatherLayer && map) {
+    map.removeLayer(weatherLayer)
+    weatherLayer = null
+  }
+  if (map) {
+    map.setTarget(undefined)
+    map.dispose()
+    map = null
+  }
+  selectedGovernorateFeature = null
+  hoveredGovernorateFeature = null
+  lastHoveredGovernorateName = null
+})
+
 watch(
   () => props.selectedCity,
   (newCity) => {
@@ -324,11 +323,8 @@ async function resolveOwmAppId() {
   if (owmAppIdCache) {
     return owmAppIdCache
   }
-  const base =
-    import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ||
-    'http://127.0.0.1:8000'
   try {
-    const response = await fetch(`${base}/api/config/weather-map`)
+    const response = await fetch(apiUrl('/api/config/weather-map'))
     const data = response.ok ? await response.json() : {}
     const key = data?.apiKey != null ? String(data.apiKey).trim() : ''
     if (key) {

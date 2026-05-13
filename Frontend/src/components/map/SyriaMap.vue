@@ -95,6 +95,7 @@ const governoratesSource = new VectorSource({
 const governoratesLayer = new VectorLayer({
   source: governoratesSource,
   style: defaultGovernorateStyle,
+  zIndex: 2,
 })
 
 function getGovernorateName(feature) {
@@ -180,6 +181,7 @@ onMounted(() => {
     source: new VectorSource({
       features: cityFeatures,
     }),
+    zIndex: 3,
   })
 
   map = new Map({
@@ -221,7 +223,8 @@ onMounted(() => {
 
     selectGovernorate(clickedGovernorate)
   })
-map.on('pointermove', (event) => {
+
+  map.on('pointermove', (event) => {
   if (event.dragging) return
 
   // إذا في محافظة محددة بالضغط أو البحث، لا تعمل hover أبداً
@@ -309,29 +312,35 @@ const activeLayer = ref('none');
 let weatherLayer = null; 
 
 const handleLayerChange = (layerType) => {
-  console.log("تغيير الطبقة إلى:", layerType); 
-  activeLayer.value = layerType;
+  activeLayer.value = layerType
+
+  if (!map) return
 
   if (weatherLayer) {
-    map.removeLayer(weatherLayer);
-    weatherLayer = null;
+    map.removeLayer(weatherLayer)
+    weatherLayer = null
   }
 
-  // 2. إذا كانت الخريطة عادية، نتوقف
-  if (layerType === 'none') return;
+  if (layerType === 'none') return
 
-  const API_KEY = 'YOUR_OPENWEATHER_API_KEY'; 
-  
+  const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY
+  if (!API_KEY) {
+    console.warn(
+      'VITE_OPENWEATHER_API_KEY غير مضبوط: أضف المفتاح في Frontend/.env.local',
+    )
+    return
+  }
+
   weatherLayer = new TileLayer({
     source: new XYZ({
       url: `https://tile.openweathermap.org/map/${layerType}/{z}/{x}/{y}.png?appid=${API_KEY}`,
     }),
     zIndex: 1,
-    opacity: 0.7 // شفافية الطبقة
-  });
+    opacity: 0.72,
+  })
 
-  map.addLayer(weatherLayer);
-};
+  map.addLayer(weatherLayer)
+}
 </script>
 
 <style scoped>

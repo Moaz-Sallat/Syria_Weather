@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-const props = defineProps(['activeLayer'])
+defineProps(['activeLayer'])
 const emit = defineEmits(['change-layer'])
 
 const layers = [

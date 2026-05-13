@@ -201,7 +201,7 @@ onUnmounted(() => {
 
 .back-link {
   position: absolute;
-  right: 24px;
+  left: 24px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 14px;
@@ -285,7 +285,7 @@ h2 {
 
 .system-status {
   position: absolute;
-  left: 24px;
+  right: 24px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;

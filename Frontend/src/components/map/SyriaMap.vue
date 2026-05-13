@@ -26,13 +26,16 @@ import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import LayerControl from '@/components/map/LayerControl.vue'
-import { SYRIA_GOVERNORATES as cities } from '@/data/syriaGovernorates.js'
 import { apiUrl } from '@/config/api.js'
 
 const props = defineProps({
   selectedCity: {
     type: Object,
     default: null,
+  },
+  cities: {
+    type: Array,
+    required: true,
   },
 })
 
@@ -99,7 +102,7 @@ function normalizeArabicName(name) {
 function findCityByGovernorateName(govName) {
   const normalizedGovName = normalizeArabicName(govName)
 
-  return cities.find((city) => {
+  return props.cities.find((city) => {
     return normalizeArabicName(city.name) === normalizedGovName
   })
 }
@@ -141,7 +144,7 @@ function selectGovernorate(feature) {
 }
 
 onMounted(() => {
-  const cityFeatures = cities.map((city) => {
+  const cityFeatures = props.cities.map((city) => {
     const feature = new Feature({
       geometry: new Point(fromLonLat([city.lon, city.lat])),
       cityData: city,

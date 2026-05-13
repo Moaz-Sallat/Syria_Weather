@@ -15,18 +15,22 @@
       <strong>{{ city.lat }}</strong>
     </div>
 
-    <div class="weather-placeholder" v-if="loading">
+    <div v-if="loading" class="weather-placeholder loading">
       جاري تحميل الطقس...
     </div>
 
-    <div class="weather-placeholder" v-else-if="weather">
+    <div v-else-if="error" class="weather-placeholder error" role="alert">
+      {{ error }}
+    </div>
+
+    <div v-else-if="weather" class="weather-placeholder">
       🌡️ الحرارة: {{ weather.temp }}°C<br />
       💧 الرطوبة: {{ weather.humidity }}%<br />
       🌬️ سرعة الرياح: {{ weather.wind_speed }} m/s<br />
       ☁️ الحالة: {{ weather.description }}
     </div>
 
-    <div class="weather-placeholder" v-else>
+    <div v-else class="weather-placeholder muted">
       لا توجد بيانات طقس
     </div>
   </div>
@@ -45,6 +49,10 @@ defineProps({
   loading: {
     type: Boolean,
     default: false,
+  },
+  error: {
+    type: String,
+    default: null,
   },
 })
 
@@ -105,6 +113,20 @@ defineEmits(['close'])
   font-weight: bold;
   color: #0277bd;
   line-height: 1.9;
+}
+
+.weather-placeholder.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.weather-placeholder.muted {
+  color: #546e7a;
+  background: #eceff1;
+}
+
+.weather-placeholder.loading {
+  color: #1565c0;
 }
 
 @keyframes slideIn {

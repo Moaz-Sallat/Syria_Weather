@@ -9,9 +9,7 @@
         خريطة تفاعلية تعرض محافظات سوريا مع بيانات الطقس بشكل مباشر
       </p>
 
-      <RouterLink to="/dashboard">
-        <button>دخول إلى لوحة التحكم</button>
-      </RouterLink>
+      <RouterLink class="cta" to="/dashboard">دخول إلى لوحة التحكم</RouterLink>
 
       <div class="cards">
         <div class="card">
@@ -73,20 +71,28 @@ p {
   margin-bottom: 25px;
 }
 
-button {
+.cta {
+  display: inline-block;
   background: white;
   color: #1e88e5;
   border: none;
   padding: 14px 35px;
   font-size: 18px;
+  font-weight: 700;
   border-radius: 30px;
   cursor: pointer;
-  transition: 0.3s;
+  transition: transform 0.3s, background 0.3s;
+  text-decoration: none;
 }
 
-button:hover {
-  transform: scale(1.08);
+.cta:hover {
+  transform: scale(1.05);
   background: #f1f1f1;
+}
+
+.cta:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 3px;
 }
 
 .cards {

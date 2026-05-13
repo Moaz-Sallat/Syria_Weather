@@ -30,6 +30,9 @@ API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 
 def get_db_connection():
+    if not DATABASE_URL:
+        print("Database: DATABASE_URL is not set")
+        return None
     try:
         conn = psycopg2.connect(
             DATABASE_URL,

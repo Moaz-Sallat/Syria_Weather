@@ -74,8 +74,9 @@ def weather_map_tile_key():
     return {"apiKey": API_KEY}
 
 
-@app.get("/api/map/cities")
-def get_cities_geojson():
+@app.get("/api/cities")
+def list_cities():
+    """قائمة المحافظات من قاعدة البيانات (للواجهة والبحث)."""
     conn = get_db_connection()
 
     if not conn:
@@ -83,30 +84,69 @@ def get_cities_geojson():
 
     cur = conn.cursor()
 
-    query = """
-        SELECT jsonb_build_object(
-            'type', 'FeatureCollection',
-            'features', COALESCE(jsonb_agg(features.feature), '[]'::jsonb)
-        ) AS geojson
-        FROM (
-            SELECT jsonb_build_object(
-                'type', 'Feature',
-                'id', id,
-                'geometry', ST_AsGeoJSON(geom)::jsonb,
-                'properties', jsonb_build_object(
-                    'id', id,
-                    'name_ar', name_ar,
-                    'name_en', name_en
-                )
-            ) AS feature
+    try:
+        cur.execute(
+            """
+            SELECT id, name_ar, name_en, lon, lat
             FROM cities
-        ) features;
-    """
+            ORDER BY id ASC
+            """
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "id": row["id"],
+                "name": row["name_ar"],
+                "name_ar": row["name_ar"],
+                "name_en": row["name_en"],
+                "lon": float(row["lon"]),
+                "lat": float(row["lat"]),
+            }
+            for row in rows
+        ]
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/api/map/cities")
+def get_cities_geojson():
+    """FeatureCollection لنقاط المدن من أعمدة lon/lat (دون الحاجة لعمود geom)."""
+    conn = get_db_connection()
+
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+
+    cur = conn.cursor()
 
     try:
-        cur.execute(query)
-        result = cur.fetchone()
-        return result["geojson"]
+        cur.execute(
+            """
+            SELECT id, name_ar, name_en, lon, lat
+            FROM cities
+            ORDER BY id ASC
+            """
+        )
+        rows = cur.fetchall()
+        features = []
+        for row in rows:
+            lon = float(row["lon"])
+            lat = float(row["lat"])
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [lon, lat],
+                    },
+                    "properties": {
+                        "id": row["id"],
+                        "name_ar": row["name_ar"],
+                        "name_en": row["name_en"],
+                    },
+                }
+            )
+        return {"type": "FeatureCollection", "features": features}
     except Exception as e:
         print(f"Cities Query Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

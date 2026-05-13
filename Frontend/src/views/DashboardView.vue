@@ -39,6 +39,7 @@
           autocomplete="off"
           placeholder="ابحث عن محافظة..."
           aria-label="بحث عن محافظة"
+          :disabled="citiesLoading || !!citiesLoadError || !cities.length"
         />
 
         <div v-if="filteredCities.length && searchText" class="search-results" role="listbox">
@@ -55,8 +56,18 @@
       </div>
     </div>
 
+    <div v-if="citiesLoading" class="map-state loading">جاري تحميل المحافظات من الخادم...</div>
+    <div v-else-if="citiesLoadError" class="map-state error" role="alert">
+      {{ citiesLoadError }}
+    </div>
+    <div v-else-if="!cities.length" class="map-state error">
+      لا توجد محافظات في قاعدة البيانات.
+    </div>
+
     <SyriaMap
+      v-else
       ref="syriaMapRef"
+      :cities="cities"
       :selected-city="selectedCity"
       @select-city="handleSelectCity"
     />
@@ -77,8 +88,12 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import SyriaMap from '@/components/map/SyriaMap.vue'
 import WeatherCard from '@/components/map/WeatherCard.vue'
-import { SYRIA_GOVERNORATES as cities } from '@/data/syriaGovernorates.js'
 import { apiUrl } from '@/config/api.js'
+import { fetchCities } from '@/api/cities.js'
+
+const cities = ref([])
+const citiesLoading = ref(true)
+const citiesLoadError = ref(null)
 
 const selectedCity = ref(null)
 const weather = ref(null)
@@ -93,7 +108,7 @@ let healthPollId = null
 const filteredCities = computed(() => {
   const value = searchText.value.trim()
   if (!value) return []
-  return cities.filter((city) => city.name.includes(value))
+  return cities.value.filter((city) => city.name.includes(value))
 })
 
 function parseWeatherError(data) {
@@ -116,6 +131,20 @@ async function checkSystemHealth() {
     systemStatus.value = result.status === 'ok' ? 'online' : 'offline'
   } catch {
     systemStatus.value = 'offline'
+  }
+}
+
+async function loadCities() {
+  citiesLoading.value = true
+  citiesLoadError.value = null
+  try {
+    cities.value = await fetchCities()
+  } catch (e) {
+    cities.value = []
+    citiesLoadError.value =
+      e instanceof Error ? e.message : 'فشل تحميل قائمة المحافظات'
+  } finally {
+    citiesLoading.value = false
   }
 }
 
@@ -169,6 +198,7 @@ function closeCard() {
 onMounted(() => {
   checkSystemHealth()
   healthPollId = window.setInterval(checkSystemHealth, 10000)
+  loadCities()
 })
 
 onUnmounted(() => {
@@ -185,6 +215,26 @@ onUnmounted(() => {
   font-family: 'Cairo', sans-serif;
   background: #f4f7fb;
   min-height: 100vh;
+}
+
+.map-state {
+  margin: 24px auto;
+  max-width: 560px;
+  padding: 24px 28px;
+  border-radius: 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.map-state.loading {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.map-state.error {
+  background: #ffebee;
+  color: #c62828;
 }
 
 .header-row {
@@ -252,6 +302,11 @@ h2 {
   border-color: #1e88e5;
   background: white;
   box-shadow: 0 0 0 4px rgba(30, 136, 229, 0.12);
+}
+
+.search-box input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .search-results {

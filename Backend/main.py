@@ -165,6 +165,81 @@ def get_weather(city_id: int):
     cur = conn.cursor()
 
     try:
+        # جلب إحداثيات المدينة فقط من جدول cities
+        cur.execute(
+            """
+            SELECT id, name_ar, name_en, lon, lat
+            FROM cities
+            WHERE id = %s
+            """,
+            (city_id,),
+        )
+
+        city = cur.fetchone()
+
+        if not city:
+            raise HTTPException(status_code=404, detail="City not found")
+
+        if not API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENWEATHER_API_KEY is missing in .env",
+            )
+
+        # جلب الطقس مباشرة من OpenWeather API بدون تخزين
+        url = (
+            "https://api.openweathermap.org/data/2.5/weather"
+            f"?lat={city['lat']}"
+            f"&lon={city['lon']}"
+            f"&appid={API_KEY}"
+            "&units=metric"
+            "&lang=ar"
+        )
+
+        resp = requests.get(url, timeout=10)
+        response = resp.json()
+
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Weather API Error: {response.get('message')}",
+            )
+
+        weather_data = {
+            "temp": response["main"]["temp"],
+            "humidity": response["main"]["humidity"],
+            "description": response["weather"][0]["description"],
+            "wind_speed": response["wind"]["speed"],
+        }
+
+        return {
+            "source": "api",
+            "city": {
+                "id": city["id"],
+                "name_ar": city["name_ar"],
+                "name_en": city["name_en"],
+                "lat": city["lat"],
+                "lon": city["lon"],
+            },
+            "data": weather_data,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Weather Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+    conn = get_db_connection()
+
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+
+    cur = conn.cursor()
+
+    try:
         # جلب آخر بيانات محفوظة خلال 30 دقيقة
         cur.execute(
             """

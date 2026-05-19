@@ -4,8 +4,22 @@
       :activeLayer="activeLayer" 
       @change-layer="handleLayerChange" 
     />
-    
+
+    <button class="fixed-points-btn" @click="toggleFixedPointsMode">
+      {{ fixedPointsMode ? 'رجوع للوضع الطبيعي' : 'عرض نقاط الإحداثيات' }}
+    </button>
+
     <div id="map" ref="mapElement"></div>
+
+  <div 
+  v-if="fixedPointsMode && selectedFixedPoint" 
+  class="point-popup"
+  :style="fixedPointPopupStyle"
+>
+      <h3>{{ selectedFixedPoint.name }}</h3>
+      <p>خط الطول: {{ selectedFixedPoint.lon }}</p>
+      <p>خط العرض: {{ selectedFixedPoint.lat }}</p>
+    </div>
   </div>
 </template>
 
@@ -40,6 +54,28 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['select-city'])
+const fixedPointsMode = ref(false)
+const selectedFixedPoint = ref(null)
+const fixedPointPopupStyle = ref({})
+let fixedPointsLayer = null
+
+const fixedPoints = [
+  { name: 'النقطة 1', lon: 36.30, lat: 33.51 },
+  { name: 'النقطة 2', lon: 37.15, lat: 36.20 },
+  { name: 'النقطة 3', lon: 39.00, lat: 35.95 },
+  { name: 'النقطة 4', lon: 40.75, lat: 36.50 },
+  { name: 'النقطة 5', lon: 36.75, lat: 35.12 },
+  { name: 'النقطة 6', lon: 35.93, lat: 34.73 },
+  { name: 'النقطة 7', lon: 36.72, lat: 34.88 },
+  { name: 'النقطة 8', lon: 37.05, lat: 35.52 },
+  { name: 'النقطة 9', lon: 38.30, lat: 34.55 },
+  { name: 'النقطة 10', lon: 40.15, lat: 35.33 },
+  { name: 'النقطة 11', lon: 36.10, lat: 32.70 },
+  { name: 'النقطة 12', lon: 35.88, lat: 33.13 },
+  { name: 'النقطة 13', lon: 36.45, lat: 32.52 },
+  { name: 'النقطة 14', lon: 38.02, lat: 36.73 },
+  { name: 'النقطة 15', lon: 41.20, lat: 37.05 },
+]
 
 let map = null
 let selectedGovernorateFeature = null
@@ -142,7 +178,80 @@ function selectGovernorate(feature) {
     maxZoom: 8,
   })
 }
+function createFixedPointsLayer() {
+  const features = fixedPoints.map((point) => {
+    const feature = new Feature({
+      geometry: new Point(fromLonLat([point.lon, point.lat])),
+      pointData: point,
+    })
 
+    feature.setStyle(
+      new Style({
+        image: new Circle({
+          radius: 7,
+          fill: new Fill({ color: '#1e88e5' }),
+          stroke: new Stroke({
+            color: '#ffffff',
+            width: 2,
+          }),
+        }),
+      }),
+    )
+
+    return feature
+  })
+
+  return new VectorLayer({
+    source: new VectorSource({
+      features,
+    }),
+    zIndex: 10,
+  })
+}
+
+function toggleFixedPointsMode() {
+  fixedPointsMode.value = !fixedPointsMode.value
+  selectedFixedPoint.value = null
+
+  if (!map) return
+
+  if (fixedPointsMode.value) {
+
+    // اخفاء النقاط الحمراء
+    if (citiesLayer) {
+      citiesLayer.setVisible(false)
+    }
+
+    clearSelectedGovernorate(true)
+
+    if (hoveredGovernorateFeature) {
+      hoveredGovernorateFeature.setStyle(defaultGovernorateStyle)
+      hoveredGovernorateFeature = null
+    }
+
+    lastHoveredGovernorateName = null
+
+    if (!fixedPointsLayer) {
+      fixedPointsLayer = createFixedPointsLayer()
+      map.addLayer(fixedPointsLayer)
+    }
+
+  } else {
+
+    // اظهار النقاط الحمراء
+    if (citiesLayer) {
+      citiesLayer.setVisible(true)
+    }
+
+    if (fixedPointsLayer) {
+      map.removeLayer(fixedPointsLayer)
+      fixedPointsLayer = null
+    }
+
+    map.getTargetElement().style.cursor = ''
+  }
+}
+let citiesLayer = null
 onMounted(() => {
   const cityFeatures = props.cities.map((city) => {
     const feature = new Feature({
@@ -166,12 +275,13 @@ onMounted(() => {
     return feature
   })
 
-  const citiesLayer = new VectorLayer({
+  citiesLayer = new VectorLayer({
     source: new VectorSource({
       features: cityFeatures,
     }),
     zIndex: 3,
   })
+  
 
   map = new Map({
     target: 'map',
@@ -191,6 +301,38 @@ onMounted(() => {
   })
 
   map.on('click', (event) => {
+  if (fixedPointsMode.value) {
+  let clickedPoint = null
+  let clickedCoordinate = null
+
+  map.forEachFeatureAtPixel(
+    event.pixel,
+    (feature, layer) => {
+      if (layer === fixedPointsLayer) {
+        clickedPoint = feature.get('pointData')
+        clickedCoordinate = feature.getGeometry().getCoordinates()
+        return true
+      }
+      return false
+    },
+    {
+      hitTolerance: 8,
+    },
+  )
+
+  selectedFixedPoint.value = clickedPoint
+
+  if (clickedPoint && clickedCoordinate) {
+    const pixel = map.getPixelFromCoordinate(clickedCoordinate)
+
+    fixedPointPopupStyle.value = {
+      left: `${pixel[0]}px`,
+      top: `${pixel[1]}px`,
+    }
+  }
+
+  return
+}
     let clickedGovernorate = null
 
     map.forEachFeatureAtPixel(
@@ -214,6 +356,10 @@ onMounted(() => {
   })
 
   map.on('pointermove', (event) => {
+      if (fixedPointsMode.value) {
+    map.getTargetElement().style.cursor = 'default'
+    return
+  }
   if (event.dragging) return
 
   // إذا في محافظة محددة بالضغط أو البحث، لا تعمل hover أبداً
@@ -388,5 +534,46 @@ onUnmounted(() => {
 #map {
   width: 100%;
   height: 100%;
+}
+.fixed-points-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  border: none;
+  border-radius: 14px;
+  padding: 10px 16px;
+  background: #1e88e5;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.fixed-points-btn:hover {
+  background: #1565c0;
+}
+
+.point-popup {
+  position: absolute;
+  z-index: 21;
+  width: 230px;
+  border-radius: 18px;
+  padding: 14px;
+  background: white;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  direction: rtl;
+  transform: translate(-50%, calc(-100% - 18px));
+  text-align: center;
+}
+
+.point-popup h3 {
+  margin: 0 0 10px;
+  color: #1e88e5;
+}
+
+.point-popup p {
+  margin: 6px 0;
+  font-weight: 600;
 }
 </style>

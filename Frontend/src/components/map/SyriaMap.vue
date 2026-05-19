@@ -2,7 +2,7 @@
   <div class="map-wrapper">
     <LayerControl 
       :activeLayer="activeLayer" 
-      @change-layer="handleLayerChange" 
+      @change-layer="selectLayer" 
     />
     
     <div id="map" ref="mapElement"></div>
@@ -26,7 +26,6 @@ import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import LayerControl from '@/components/map/LayerControl.vue'
-import { apiUrl } from '@/config/api.js'
 
 const props = defineProps({
   selectedCity: {
@@ -270,7 +269,6 @@ onMounted(() => {
   }
   })
 
-  void resolveOwmAppId()
 })
 
 watch(
@@ -302,33 +300,18 @@ defineExpose({
 const activeLayer = ref('none')
 let weatherLayer = null
 
-/** يُحمّل من الباكند عند غياب VITE_OPENWEATHER_API_KEY؛ يُخزَّن فقط عند نجاح المفتاح */
-let owmAppIdCache = ''
+const IEM_GLOBAL_SATELLITE_URL =
+  'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/global_satellite/{z}/{x}/{y}.png'
 
-async function resolveOwmAppId() {
-  const fromEnv = import.meta.env.VITE_OPENWEATHER_API_KEY
-  if (fromEnv && String(fromEnv).trim()) {
-    return String(fromEnv).trim()
-  }
-  if (owmAppIdCache) {
-    return owmAppIdCache
-  }
-  try {
-    const response = await fetch(apiUrl('/api/config/weather-map'))
-    const data = response.ok ? await response.json() : {}
-    const key = data?.apiKey != null ? String(data.apiKey).trim() : ''
-    if (key) {
-      owmAppIdCache = key
-    }
-    return key
-  } catch {
-    return ''
-  }
-}
+const UNSUPPORTED_LAYER_IDS = new Set([
+  'temp_new',
+  'wind_new',
+  'clouds_new',
+  'pressure_new',
+  'snow_new',
+])
 
-const handleLayerChange = async (layerType) => {
-  activeLayer.value = layerType
-
+function selectLayer(id) {
   if (!map) {
     activeLayer.value = 'none'
     return
@@ -339,24 +322,33 @@ const handleLayerChange = async (layerType) => {
     weatherLayer = null
   }
 
-  if (layerType === 'none') return
+  if (id === 'none') {
+    activeLayer.value = 'none'
+    return
+  }
 
-  const appId = await resolveOwmAppId()
-  if (!appId) {
-    console.warn(
-      'لا يوجد مفتاح OpenWeather: ضع OPENWEATHER_API_KEY في .env للباكند أو VITE_OPENWEATHER_API_KEY للفرونت، وتأكد أن الباكند يعمل.',
+  if (UNSUPPORTED_LAYER_IDS.has(id)) {
+    console.info(
+      `[Syria Weather Map] طبقة "${id}" غير متوفرة حالياً — IEM يوفّر بيانات هطول/أقمار صناعية فقط.`,
     )
     activeLayer.value = 'none'
     return
   }
 
+  if (id !== 'precipitation_new') {
+    activeLayer.value = 'none'
+    return
+  }
+
+  activeLayer.value = id
+
   weatherLayer = new TileLayer({
     source: new XYZ({
-      url: `https://tile.openweathermap.org/map/${layerType}/{z}/{x}/{y}.png?appid=${appId}`,
+      url: IEM_GLOBAL_SATELLITE_URL,
       crossOrigin: 'anonymous',
     }),
     zIndex: 1,
-    opacity: 0.72,
+    opacity: 0.6,
   })
 
   map.addLayer(weatherLayer)

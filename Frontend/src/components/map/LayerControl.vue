@@ -4,7 +4,9 @@
       v-for="layer in layers"
       :key="layer.id"
       type="button"
-      :class="{ active: activeLayer === layer.id }"
+      :class="{ active: activeLayer === layer.id, disabled: isDisabled(layer) }"
+      :disabled="isDisabled(layer)"
+      :title="layerTitle(layer)"
       @click="selectLayer(layer.id)"
     >
       <span v-if="layer.icon" class="icon" aria-hidden="true">{{ layer.icon }}</span>
@@ -14,17 +16,35 @@
 </template>
 
 <script setup>
-defineProps(['activeLayer'])
+const props = defineProps({
+  activeLayer: String,
+  owmMapAvailable: {
+    type: Boolean,
+    default: false,
+  },
+})
 const emit = defineEmits(['change-layer'])
 
-/** OpenWeather (تفاصيل عند التقريب) أو RainViewer 512 كبديل مجاني */
 const layers = [
   { id: 'none', name: 'خريطة عادية' },
+  { id: 'temp_new', name: 'حرارة', icon: '🌡️' },
+  { id: 'wind_new', name: 'رياح', icon: '💨', requiresOwm: true },
   { id: 'clouds_new', name: 'غيوم', icon: '☁️' },
   { id: 'precipitation_new', name: 'هطول', icon: '🌧️' },
 ]
 
+function isDisabled(layer) {
+  return Boolean(layer.requiresOwm && !props.owmMapAvailable)
+}
+
+function layerTitle(layer) {
+  if (!isDisabled(layer)) return ''
+  return 'يتطلب مفتاح OpenWeather مجاني في .env (OPENWEATHER_API_KEY)'
+}
+
 function selectLayer(id) {
+  const layer = layers.find((l) => l.id === id)
+  if (layer && isDisabled(layer)) return
   emit('change-layer', id)
 }
 </script>
@@ -74,7 +94,13 @@ button.active {
   color: #fff;
 }
 
-button:hover:not(.active) {
+button:hover:not(.active):not(.disabled) {
   background: #f0f0f0;
+}
+
+button.disabled,
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 </style>

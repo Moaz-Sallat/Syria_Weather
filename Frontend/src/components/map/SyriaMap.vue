@@ -1,8 +1,9 @@
 <template>
   <div class="map-wrapper">
-    <LayerControl 
-      :activeLayer="activeLayer" 
-      @change-layer="selectLayer" 
+    <LayerControl
+      :activeLayer="activeLayer"
+      :owmMapAvailable="owmMapAvailable"
+      @change-layer="selectLayer"
     />
     
     <div id="map" ref="mapElement"></div>
@@ -15,16 +16,21 @@ import 'ol/ol.css'
 import Map from 'ol/Map'
 import View from 'ol/View'
 import TileLayer from 'ol/layer/Tile'
+import WebGLTile from 'ol/layer/WebGLTile'
 import VectorLayer from 'ol/layer/Vector'
 import OSM from 'ol/source/OSM'
+import DataTile from 'ol/source/DataTile'
+import VectorTile from 'ol/source/VectorTile'
 import VectorSource from 'ol/source/Vector'
 import Feature from 'ol/Feature'
 import Point from 'ol/geom/Point'
 import XYZ from 'ol/source/XYZ'
+import MVT from 'ol/format/MVT'
 import { fromLonLat } from 'ol/proj'
 import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { addOpenLayersProtocolSupport, omProtocol } from '@openmeteo/weather-map-layer'
 import LayerControl from '@/components/map/LayerControl.vue'
 import { apiUrl } from '@/config/api.js'
 
@@ -264,6 +270,9 @@ onMounted(() => {
   }
   })
 
+  void resolveOwmAppId().then((key) => {
+    owmMapAvailable.value = Boolean(key)
+  })
 })
 
 watch(
@@ -293,15 +302,56 @@ defineExpose({
 
 
 const activeLayer = ref('none')
+const owmMapAvailable = ref(false)
 let weatherLayer = null
 let rainViewerFrame = null
 let rainViewerFetchedAt = 0
 let owmAppIdCache = ''
 
-/** RainViewer: بلاط 512 + حد أقصى للتقريب. OpenWeather: تفاصيل حتى zoom 18 عند توفر المفتاح. */
+/** حرارة: Open-Meteo (DWD ICON). غيوم/هطول: OWM ثم RainViewer. رياح: OWM فقط. */
+const RAINVIEWER_LAYERS = new Set(['precipitation_new', 'clouds_new'])
+const OWM_ONLY_LAYERS = new Set(['wind_new'])
+const WEATHER_LAYER_IDS = new Set(['temp_new', ...RAINVIEWER_LAYERS, ...OWM_ONLY_LAYERS])
+
+const OPEN_METEO_TEMP_URL =
+  'https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?time_step=current_time_1H&variable=temperature_2m'
+
+let openMeteoOlAdapter = null
+
 const RAINVIEWER_TILE_SIZE = 512
 const RAINVIEWER_MAX_ZOOM = 11
-const OWM_WEATHER_LAYERS = new Set(['precipitation_new', 'clouds_new'])
+
+const OWM_LAYER_OPACITY = {
+  precipitation_new: 0.78,
+  clouds_new: 0.65,
+  wind_new: 0.72,
+}
+
+function getOpenMeteoOlAdapter() {
+  if (!openMeteoOlAdapter) {
+    openMeteoOlAdapter = addOpenLayersProtocolSupport({
+      source: { DataTile, VectorTile },
+      format: { MVT },
+    })
+    openMeteoOlAdapter.addProtocol('om', omProtocol)
+  }
+  return openMeteoOlAdapter
+}
+
+function buildOpenMeteoTempSource() {
+  const adapter = getOpenMeteoOlAdapter()
+  return adapter.createRasterSource(`om://${OPEN_METEO_TEMP_URL}`, {
+    maxZoom: 12,
+  })
+}
+
+function disposeWeatherLayer() {
+  if (!weatherLayer) return
+  const source = weatherLayer.getSource()
+  map.removeLayer(weatherLayer)
+  source?.dispose?.()
+  weatherLayer = null
+}
 
 async function resolveOwmAppId() {
   const fromEnv = import.meta.env.VITE_OPENWEATHER_API_KEY
@@ -363,29 +413,46 @@ function buildRainViewerTileUrl(layerId, frame) {
   return null
 }
 
+function buildOwmSourceOptions(layerId, appId) {
+  return {
+    url: `https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${appId}`,
+    crossOrigin: 'anonymous',
+    maxZoom: 18,
+    tileSize: 256,
+    opacity: OWM_LAYER_OPACITY[layerId] ?? 0.7,
+  }
+}
+
 async function buildWeatherSourceOptions(layerId) {
   const appId = await resolveOwmAppId()
-  if (appId && OWM_WEATHER_LAYERS.has(layerId)) {
+  if (appId) {
+    owmMapAvailable.value = true
+  }
+
+  if (OWM_ONLY_LAYERS.has(layerId)) {
+    if (!appId) return null
+    return buildOwmSourceOptions(layerId, appId)
+  }
+
+  if (RAINVIEWER_LAYERS.has(layerId)) {
+    if (appId) {
+      return buildOwmSourceOptions(layerId, appId)
+    }
+
+    const frame = await getLatestRainViewerFrame()
+    const url = buildRainViewerTileUrl(layerId, frame)
+    if (!url) return null
+
     return {
-      url: `https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${appId}`,
+      url,
       crossOrigin: 'anonymous',
-      maxZoom: 18,
-      tileSize: 256,
-      opacity: layerId === 'precipitation_new' ? 0.78 : 0.65,
+      maxZoom: RAINVIEWER_MAX_ZOOM,
+      tileSize: RAINVIEWER_TILE_SIZE,
+      opacity: OWM_LAYER_OPACITY[layerId] ?? 0.7,
     }
   }
 
-  const frame = await getLatestRainViewerFrame()
-  const url = buildRainViewerTileUrl(layerId, frame)
-  if (!url) return null
-
-  return {
-    url,
-    crossOrigin: 'anonymous',
-    maxZoom: RAINVIEWER_MAX_ZOOM,
-    tileSize: RAINVIEWER_TILE_SIZE,
-    opacity: layerId === 'precipitation_new' ? 0.75 : 0.6,
-  }
+  return null
 }
 
 async function selectLayer(id) {
@@ -394,24 +461,43 @@ async function selectLayer(id) {
     return
   }
 
-  if (weatherLayer) {
-    map.removeLayer(weatherLayer)
-    weatherLayer = null
-  }
+  disposeWeatherLayer()
 
   if (id === 'none') {
     activeLayer.value = 'none'
     return
   }
 
-  if (id !== 'precipitation_new' && id !== 'clouds_new') {
+  if (!WEATHER_LAYER_IDS.has(id)) {
     activeLayer.value = 'none'
+    return
+  }
+
+  if (id === 'temp_new') {
+    activeLayer.value = id
+    try {
+      weatherLayer = new WebGLTile({
+        source: buildOpenMeteoTempSource(),
+        zIndex: 1,
+        opacity: 0.75,
+      })
+      map.getLayers().insertAt(1, weatherLayer)
+    } catch (error) {
+      console.warn('[Syria Weather Map] تعذّر تحميل طبقة الحرارة من Open-Meteo.', error)
+      activeLayer.value = 'none'
+    }
     return
   }
 
   const sourceOptions = await buildWeatherSourceOptions(id)
   if (!sourceOptions) {
-    console.warn('[Syria Weather Map] تعذّر تحميل طبقة الطقس.')
+    if (OWM_ONLY_LAYERS.has(id)) {
+      console.warn(
+        '[Syria Weather Map] طبقة الرياح تحتاج OPENWEATHER_API_KEY (حساب مجاني على openweathermap.org).',
+      )
+    } else {
+      console.warn('[Syria Weather Map] تعذّر تحميل طبقة الطقس.')
+    }
     activeLayer.value = 'none'
     return
   }
@@ -431,8 +517,7 @@ async function selectLayer(id) {
 
 onUnmounted(() => {
   if (weatherLayer && map) {
-    map.removeLayer(weatherLayer)
-    weatherLayer = null
+    disposeWeatherLayer()
   }
   if (map) {
     map.setTarget(undefined)

@@ -17,14 +17,11 @@
 defineProps(['activeLayer'])
 const emit = defineEmits(['change-layer'])
 
+/** RainViewer — تغطية عالمية تشمل سوريا (IEM GOES لا يغطي الشرق الأوسط) */
 const layers = [
   { id: 'none', name: 'خريطة عادية' },
-  { id: 'temp_new', name: 'حرارة', icon: '🌡️' },
-  { id: 'wind_new', name: 'رياح', icon: '💨' },
   { id: 'clouds_new', name: 'غيوم', icon: '☁️' },
   { id: 'precipitation_new', name: 'هطول', icon: '🌧️' },
-  { id: 'pressure_new', name: 'ضغط جوي', icon: '📉' },
-  { id: 'snow_new', name: 'ثلوج', icon: '❄️' },
 ]
 
 function selectLayer(id) {

@@ -194,15 +194,12 @@ onMounted(() => {
 
     map.forEachFeatureAtPixel(
       event.pixel,
-      (feature, layer) => {
-        if (layer === governoratesLayer) {
-          clickedGovernorate = feature
-          return true
-        }
-
-        return false
+      (feature) => {
+        clickedGovernorate = feature
+        return true
       },
       {
+        layerFilter: (layer) => layer === governoratesLayer,
         hitTolerance: 3,
       },
     )
@@ -225,15 +222,12 @@ onMounted(() => {
 
   map.forEachFeatureAtPixel(
     event.pixel,
-    (feature, layer) => {
-      if (layer === governoratesLayer) {
-        hoveredFeature = feature
-        return true
-      }
-
-      return false
+    (feature) => {
+      hoveredFeature = feature
+      return true
     },
     {
+      layerFilter: (layer) => layer === governoratesLayer,
       hitTolerance: 3,
     },
   )
@@ -299,32 +293,48 @@ defineExpose({
 
 const activeLayer = ref('none')
 let weatherLayer = null
+let rainViewerFrame = null
+let rainViewerFetchedAt = 0
 
-/** IEM TMS base (5-minute cache). See https://mesonet.agron.iastate.edu/ogc/ */
-const IEM_TILE_BASE =
-  'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0'
+/** RainViewer is global; IEM GOES East/West disks do not cover Syria (empty tiles). */
+async function getLatestRainViewerFrame() {
+  const now = Date.now()
+  if (rainViewerFrame && now - rainViewerFetchedAt < 5 * 60 * 1000) {
+    return rainViewerFrame
+  }
 
-/**
- * Valid IEM layer names (global_satellite does not exist — returns 404).
- * GOES East fulldisk covers Syria and the wider region.
- */
-const IEM_LAYER_BY_ID = {
-  precipitation_new: 'goes_east_fulldisk_ch13',
-  clouds_new: 'goes_east_fulldisk_ch02',
+  try {
+    const response = await fetch('https://api.rainviewer.com/public/weather-maps.json')
+    if (!response.ok) return rainViewerFrame
+
+    const data = await response.json()
+    const past = data?.radar?.past
+    if (!Array.isArray(past) || past.length === 0) return rainViewerFrame
+
+    rainViewerFrame = past[past.length - 1]
+    rainViewerFetchedAt = now
+    return rainViewerFrame
+  } catch {
+    return rainViewerFrame
+  }
 }
 
-const UNSUPPORTED_LAYER_IDS = new Set([
-  'temp_new',
-  'wind_new',
-  'pressure_new',
-  'snow_new',
-])
+function buildWeatherTileUrl(layerId, frame) {
+  if (!frame) return ''
 
-function getIemTileUrl(layerName) {
-  return `${IEM_TILE_BASE}/${layerName}/{z}/{x}/{y}.png`
+  if (layerId === 'precipitation_new' && frame.path) {
+    const path = String(frame.path).replace(/^\//, '')
+    return `https://tilecache.rainviewer.com/${path}/256/{z}/{x}/{y}/2/1_1.png`
+  }
+
+  if (layerId === 'clouds_new' && frame.time) {
+    return `https://tilecache.rainviewer.com/v2/coverage/${frame.time}/256/{z}/{x}/{y}/0/0_0.png`
+  }
+
+  return ''
 }
 
-function selectLayer(id) {
+async function selectLayer(id) {
   if (!map) {
     activeLayer.value = 'none'
     return
@@ -340,16 +350,15 @@ function selectLayer(id) {
     return
   }
 
-  if (UNSUPPORTED_LAYER_IDS.has(id)) {
-    console.info(
-      `[Syria Weather Map] طبقة "${id}" غير متوفرة حالياً — IEM يوفّر أقمار GOES (غيوم/هطول) فقط.`,
-    )
+  if (id !== 'precipitation_new' && id !== 'clouds_new') {
     activeLayer.value = 'none'
     return
   }
 
-  const iemLayerName = IEM_LAYER_BY_ID[id]
-  if (!iemLayerName) {
+  const frame = await getLatestRainViewerFrame()
+  const tileUrl = buildWeatherTileUrl(id, frame)
+  if (!tileUrl) {
+    console.warn('[Syria Weather Map] تعذّر تحميل بيانات RainViewer.')
     activeLayer.value = 'none'
     return
   }
@@ -358,12 +367,11 @@ function selectLayer(id) {
 
   weatherLayer = new TileLayer({
     source: new XYZ({
-      url: getIemTileUrl(iemLayerName),
+      url: tileUrl,
       crossOrigin: 'anonymous',
-      maxZoom: 8,
     }),
     zIndex: 1,
-    opacity: 0.65,
+    opacity: id === 'precipitation_new' ? 0.75 : 0.6,
   })
 
   map.getLayers().insertAt(1, weatherLayer)

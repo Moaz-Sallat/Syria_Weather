@@ -300,16 +300,29 @@ defineExpose({
 const activeLayer = ref('none')
 let weatherLayer = null
 
-const IEM_GLOBAL_SATELLITE_URL =
-  'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/global_satellite/{z}/{x}/{y}.png'
+/** IEM TMS base (5-minute cache). See https://mesonet.agron.iastate.edu/ogc/ */
+const IEM_TILE_BASE =
+  'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0'
+
+/**
+ * Valid IEM layer names (global_satellite does not exist — returns 404).
+ * GOES East fulldisk covers Syria and the wider region.
+ */
+const IEM_LAYER_BY_ID = {
+  precipitation_new: 'goes_east_fulldisk_ch13',
+  clouds_new: 'goes_east_fulldisk_ch02',
+}
 
 const UNSUPPORTED_LAYER_IDS = new Set([
   'temp_new',
   'wind_new',
-  'clouds_new',
   'pressure_new',
   'snow_new',
 ])
+
+function getIemTileUrl(layerName) {
+  return `${IEM_TILE_BASE}/${layerName}/{z}/{x}/{y}.png`
+}
 
 function selectLayer(id) {
   if (!map) {
@@ -329,13 +342,14 @@ function selectLayer(id) {
 
   if (UNSUPPORTED_LAYER_IDS.has(id)) {
     console.info(
-      `[Syria Weather Map] طبقة "${id}" غير متوفرة حالياً — IEM يوفّر بيانات هطول/أقمار صناعية فقط.`,
+      `[Syria Weather Map] طبقة "${id}" غير متوفرة حالياً — IEM يوفّر أقمار GOES (غيوم/هطول) فقط.`,
     )
     activeLayer.value = 'none'
     return
   }
 
-  if (id !== 'precipitation_new') {
+  const iemLayerName = IEM_LAYER_BY_ID[id]
+  if (!iemLayerName) {
     activeLayer.value = 'none'
     return
   }
@@ -344,14 +358,15 @@ function selectLayer(id) {
 
   weatherLayer = new TileLayer({
     source: new XYZ({
-      url: IEM_GLOBAL_SATELLITE_URL,
+      url: getIemTileUrl(iemLayerName),
       crossOrigin: 'anonymous',
+      maxZoom: 8,
     }),
     zIndex: 1,
-    opacity: 0.6,
+    opacity: 0.65,
   })
 
-  map.addLayer(weatherLayer)
+  map.getLayers().insertAt(1, weatherLayer)
 }
 
 onUnmounted(() => {

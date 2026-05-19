@@ -17,7 +17,7 @@
 defineProps(['activeLayer'])
 const emit = defineEmits(['change-layer'])
 
-/** RainViewer — تغطية عالمية تشمل سوريا (IEM GOES لا يغطي الشرق الأوسط) */
+/** OpenWeather (تفاصيل عند التقريب) أو RainViewer 512 كبديل مجاني */
 const layers = [
   { id: 'none', name: 'خريطة عادية' },
   { id: 'clouds_new', name: 'غيوم', icon: '☁️' },

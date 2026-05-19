@@ -26,6 +26,7 @@ import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import LayerControl from '@/components/map/LayerControl.vue'
+import { apiUrl } from '@/config/api.js'
 
 const props = defineProps({
   selectedCity: {
@@ -295,8 +296,34 @@ const activeLayer = ref('none')
 let weatherLayer = null
 let rainViewerFrame = null
 let rainViewerFetchedAt = 0
+let owmAppIdCache = ''
 
-/** RainViewer is global; IEM GOES East/West disks do not cover Syria (empty tiles). */
+/** RainViewer: بلاط 512 + حد أقصى للتقريب. OpenWeather: تفاصيل حتى zoom 18 عند توفر المفتاح. */
+const RAINVIEWER_TILE_SIZE = 512
+const RAINVIEWER_MAX_ZOOM = 11
+const OWM_WEATHER_LAYERS = new Set(['precipitation_new', 'clouds_new'])
+
+async function resolveOwmAppId() {
+  const fromEnv = import.meta.env.VITE_OPENWEATHER_API_KEY
+  if (fromEnv && String(fromEnv).trim()) {
+    return String(fromEnv).trim()
+  }
+  if (owmAppIdCache) {
+    return owmAppIdCache
+  }
+  try {
+    const response = await fetch(apiUrl('/api/config/weather-map'))
+    const data = response.ok ? await response.json() : {}
+    const key = data?.apiKey != null ? String(data.apiKey).trim() : ''
+    if (key) {
+      owmAppIdCache = key
+    }
+    return key
+  } catch {
+    return ''
+  }
+}
+
 async function getLatestRainViewerFrame() {
   const now = Date.now()
   if (rainViewerFrame && now - rainViewerFetchedAt < 5 * 60 * 1000) {
@@ -319,19 +346,46 @@ async function getLatestRainViewerFrame() {
   }
 }
 
-function buildWeatherTileUrl(layerId, frame) {
-  if (!frame) return ''
+function buildRainViewerTileUrl(layerId, frame) {
+  if (!frame) return null
+
+  const size = RAINVIEWER_TILE_SIZE
 
   if (layerId === 'precipitation_new' && frame.path) {
     const path = String(frame.path).replace(/^\//, '')
-    return `https://tilecache.rainviewer.com/${path}/256/{z}/{x}/{y}/2/1_1.png`
+    return `https://tilecache.rainviewer.com/${path}/${size}/{z}/{x}/{y}/2/1_1.png`
   }
 
   if (layerId === 'clouds_new' && frame.time) {
-    return `https://tilecache.rainviewer.com/v2/coverage/${frame.time}/256/{z}/{x}/{y}/0/0_0.png`
+    return `https://tilecache.rainviewer.com/v2/coverage/${frame.time}/${size}/{z}/{x}/{y}/0/0_0.png`
   }
 
-  return ''
+  return null
+}
+
+async function buildWeatherSourceOptions(layerId) {
+  const appId = await resolveOwmAppId()
+  if (appId && OWM_WEATHER_LAYERS.has(layerId)) {
+    return {
+      url: `https://tile.openweathermap.org/map/${layerId}/{z}/{x}/{y}.png?appid=${appId}`,
+      crossOrigin: 'anonymous',
+      maxZoom: 18,
+      tileSize: 256,
+      opacity: layerId === 'precipitation_new' ? 0.78 : 0.65,
+    }
+  }
+
+  const frame = await getLatestRainViewerFrame()
+  const url = buildRainViewerTileUrl(layerId, frame)
+  if (!url) return null
+
+  return {
+    url,
+    crossOrigin: 'anonymous',
+    maxZoom: RAINVIEWER_MAX_ZOOM,
+    tileSize: RAINVIEWER_TILE_SIZE,
+    opacity: layerId === 'precipitation_new' ? 0.75 : 0.6,
+  }
 }
 
 async function selectLayer(id) {
@@ -355,23 +409,21 @@ async function selectLayer(id) {
     return
   }
 
-  const frame = await getLatestRainViewerFrame()
-  const tileUrl = buildWeatherTileUrl(id, frame)
-  if (!tileUrl) {
-    console.warn('[Syria Weather Map] تعذّر تحميل بيانات RainViewer.')
+  const sourceOptions = await buildWeatherSourceOptions(id)
+  if (!sourceOptions) {
+    console.warn('[Syria Weather Map] تعذّر تحميل طبقة الطقس.')
     activeLayer.value = 'none'
     return
   }
 
   activeLayer.value = id
 
+  const { opacity, ...xyzOptions } = sourceOptions
+
   weatherLayer = new TileLayer({
-    source: new XYZ({
-      url: tileUrl,
-      crossOrigin: 'anonymous',
-    }),
+    source: new XYZ(xyzOptions),
     zIndex: 1,
-    opacity: id === 'precipitation_new' ? 0.75 : 0.6,
+    opacity,
   })
 
   map.getLayers().insertAt(1, weatherLayer)

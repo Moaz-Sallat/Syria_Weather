@@ -18,7 +18,17 @@
     >
       <h3>{{ selectedFixedPoint.name }}</h3>
       <p>خط الطول: {{ selectedFixedPoint.lon }}</p>
-      <p>خط العرض: {{ selectedFixedPoint.lat }}</p>
+<p>خط العرض: {{ selectedFixedPoint.lat }}</p>
+
+<p v-if="selectedFixedPoint.loading">جاري تحميل الطقس...</p>
+
+<template v-else-if="selectedFixedPoint.weather">
+ الحرارة: {{ selectedFixedPoint.weather.temp }}°C
+  <p>سرعة الرياح: {{ selectedFixedPoint.weather.windSpeed }} م/ث</p>
+</template>
+
+<p v-else class="weather-error">تعذر تحميل بيانات الطقس</p>
+   
     </div>
   </div>
 </template>
@@ -267,7 +277,44 @@ function toggleFixedPointsMode() {
     map.getTargetElement().style.cursor = ''
   }
 }
+async function loadFixedPointWeather(point) {
+  point.loading = true
+  point.weather = null
 
+  try {
+    const appId = await resolveOwmAppId()
+
+    if (!appId) {
+      throw new Error('OpenWeather API key is missing')
+    }
+
+    const response = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${point.lat}&lon=${point.lon}&appid=${appId}&units=metric&lang=ar`,
+    )
+
+    if (!response.ok) {
+      throw new Error('Weather request failed')
+    }
+
+    const data = await response.json()
+
+    point.weather = {
+      temp: Math.round(data.main.temp),
+      windSpeed: data.wind.speed,
+    }
+  } catch (error) {
+    console.error(error)
+    point.weather = null
+  } finally {
+    point.loading = false
+
+    if (map) {
+      map.renderSync()
+    }
+
+    updateFixedPointPopupPosition()
+  }
+}
 onMounted(() => {
   const cityFeatures = props.cities.map((city) => {
     const feature = new Feature({
@@ -298,7 +345,7 @@ onMounted(() => {
     zIndex: 3,
   })
 
-  
+
   map = new Map({
     target: 'map',
     layers: [
@@ -344,11 +391,12 @@ onMounted(() => {
       selectedFixedPoint.value = clickedPoint
       selectedFixedPointCoordinate = clickedCoordinate
 
-      if (clickedPoint && clickedCoordinate) {
-        updateFixedPointPopupPosition()
-      } else {
-        fixedPointPopupStyle.value = {}
-      }
+    if (clickedPoint && clickedCoordinate) {
+  updateFixedPointPopupPosition()
+  loadFixedPointWeather(clickedPoint)
+} else {
+  fixedPointPopupStyle.value = {}
+}
 
       return
     }
@@ -584,24 +632,33 @@ onUnmounted(() => {
 .point-popup {
   position: absolute;
   z-index: 9999;
-  width: 230px;
-  border-radius: 18px;
-  padding: 14px;
-  background: white;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  min-width: 190px;
+  border-radius: 16px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   direction: rtl;
-  text-align: center;
+  text-align: right;
   pointer-events: none;
-  transform: translate(-50%, calc(-100% - 18px));
+  transform: translate(-50%, calc(-100% - 14px));
+  backdrop-filter: blur(6px);
 }
 
 .point-popup h3 {
   margin: 0 0 10px;
   color: #1e88e5;
+  font-size: 20px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .point-popup p {
-  margin: 6px 0;
+  margin: 7px 0;
+  font-size: 16px;
   font-weight: 600;
+  color: #222;
+}
+.weather-error {
+  color: #e53935;
 }
 </style>

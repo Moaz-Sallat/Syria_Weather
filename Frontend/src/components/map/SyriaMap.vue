@@ -1,8 +1,8 @@
 <template>
   <div class="map-wrapper">
-    <LayerControl 
-      :activeLayer="activeLayer" 
-      @change-layer="handleLayerChange" 
+    <LayerControl
+      :activeLayer="activeLayer"
+      @change-layer="handleLayerChange"
     />
 
     <button class="fixed-points-btn" @click="toggleFixedPointsMode">
@@ -11,11 +11,11 @@
 
     <div id="map" ref="mapElement"></div>
 
-  <div 
-  v-if="fixedPointsMode && selectedFixedPoint" 
-  class="point-popup"
-  :style="fixedPointPopupStyle"
->
+    <div
+      v-if="fixedPointsMode && selectedFixedPoint"
+      class="point-popup"
+      :style="fixedPointPopupStyle"
+    >
       <h3>{{ selectedFixedPoint.name }}</h3>
       <p>خط الطول: {{ selectedFixedPoint.lon }}</p>
       <p>خط العرض: {{ selectedFixedPoint.lat }}</p>
@@ -24,7 +24,6 @@
 </template>
 
 <script setup>
-
 import 'ol/ol.css'
 import Map from 'ol/Map'
 import View from 'ol/View'
@@ -54,10 +53,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['select-city'])
+
 const fixedPointsMode = ref(false)
 const selectedFixedPoint = ref(null)
 const fixedPointPopupStyle = ref({})
+
+let selectedFixedPointCoordinate = null
 let fixedPointsLayer = null
+let citiesLayer = null
 
 const fixedPoints = [
   { name: 'النقطة 1', lon: 36.30, lat: 33.51 },
@@ -81,6 +84,7 @@ let map = null
 let selectedGovernorateFeature = null
 let hoveredGovernorateFeature = null
 let lastHoveredGovernorateName = null
+
 const defaultGovernorateStyle = new Style({
   fill: new Fill({
     color: 'rgba(0, 0, 0, 0.01)',
@@ -90,6 +94,7 @@ const defaultGovernorateStyle = new Style({
     width: 1,
   }),
 })
+
 const hoverGovernorateStyle = new Style({
   fill: new Fill({
     color: 'rgba(30, 136, 229, 0.18)',
@@ -99,6 +104,7 @@ const hoverGovernorateStyle = new Style({
     width: 3,
   }),
 })
+
 const selectedGovernorateStyle = new Style({
   fill: new Fill({
     color: 'rgba(229, 57, 53, 0.25)',
@@ -153,6 +159,7 @@ function clearSelectedGovernorate(shouldEmit = false) {
     emit('select-city', null)
   }
 }
+
 function selectGovernorate(feature) {
   clearSelectedGovernorate()
 
@@ -178,6 +185,7 @@ function selectGovernorate(feature) {
     maxZoom: 8,
   })
 }
+
 function createFixedPointsLayer() {
   const features = fixedPoints.map((point) => {
     const feature = new Feature({
@@ -209,15 +217,26 @@ function createFixedPointsLayer() {
   })
 }
 
+function updateFixedPointPopupPosition() {
+  if (!map || !selectedFixedPointCoordinate) return
+
+  const pixel = map.getPixelFromCoordinate(selectedFixedPointCoordinate)
+
+  fixedPointPopupStyle.value = {
+    left: `${pixel[0]}px`,
+    top: `${pixel[1]}px`,
+  }
+}
+
 function toggleFixedPointsMode() {
   fixedPointsMode.value = !fixedPointsMode.value
   selectedFixedPoint.value = null
+  selectedFixedPointCoordinate = null
+  fixedPointPopupStyle.value = {}
 
   if (!map) return
 
   if (fixedPointsMode.value) {
-
-    // اخفاء النقاط الحمراء
     if (citiesLayer) {
       citiesLayer.setVisible(false)
     }
@@ -235,10 +254,7 @@ function toggleFixedPointsMode() {
       fixedPointsLayer = createFixedPointsLayer()
       map.addLayer(fixedPointsLayer)
     }
-
   } else {
-
-    // اظهار النقاط الحمراء
     if (citiesLayer) {
       citiesLayer.setVisible(true)
     }
@@ -251,7 +267,7 @@ function toggleFixedPointsMode() {
     map.getTargetElement().style.cursor = ''
   }
 }
-let citiesLayer = null
+
 onMounted(() => {
   const cityFeatures = props.cities.map((city) => {
     const feature = new Feature({
@@ -281,8 +297,8 @@ onMounted(() => {
     }),
     zIndex: 3,
   })
-  
 
+  
   map = new Map({
     target: 'map',
     layers: [
@@ -300,39 +316,43 @@ onMounted(() => {
     }),
   })
 
+  map.on('postrender', () => {
+    updateFixedPointPopupPosition()
+  })
+
   map.on('click', (event) => {
-  if (fixedPointsMode.value) {
-  let clickedPoint = null
-  let clickedCoordinate = null
+    if (fixedPointsMode.value) {
+      let clickedPoint = null
+      let clickedCoordinate = null
 
-  map.forEachFeatureAtPixel(
-    event.pixel,
-    (feature, layer) => {
-      if (layer === fixedPointsLayer) {
-        clickedPoint = feature.get('pointData')
-        clickedCoordinate = feature.getGeometry().getCoordinates()
-        return true
+      map.forEachFeatureAtPixel(
+        event.pixel,
+        (feature, layer) => {
+          if (layer === fixedPointsLayer) {
+            clickedPoint = feature.get('pointData')
+            clickedCoordinate = feature.getGeometry().getCoordinates()
+            return true
+          }
+
+          return false
+        },
+        {
+          hitTolerance: 8,
+        },
+      )
+
+      selectedFixedPoint.value = clickedPoint
+      selectedFixedPointCoordinate = clickedCoordinate
+
+      if (clickedPoint && clickedCoordinate) {
+        updateFixedPointPopupPosition()
+      } else {
+        fixedPointPopupStyle.value = {}
       }
-      return false
-    },
-    {
-      hitTolerance: 8,
-    },
-  )
 
-  selectedFixedPoint.value = clickedPoint
-
-  if (clickedPoint && clickedCoordinate) {
-    const pixel = map.getPixelFromCoordinate(clickedCoordinate)
-
-    fixedPointPopupStyle.value = {
-      left: `${pixel[0]}px`,
-      top: `${pixel[1]}px`,
+      return
     }
-  }
 
-  return
-}
     let clickedGovernorate = null
 
     map.forEachFeatureAtPixel(
@@ -356,64 +376,64 @@ onMounted(() => {
   })
 
   map.on('pointermove', (event) => {
-      if (fixedPointsMode.value) {
-    map.getTargetElement().style.cursor = 'default'
-    return
-  }
-  if (event.dragging) return
+    if (fixedPointsMode.value) {
+      map.getTargetElement().style.cursor = 'default'
+      return
+    }
 
-  // إذا في محافظة محددة بالضغط أو البحث، لا تعمل hover أبداً
-  if (selectedGovernorateFeature) {
+    if (event.dragging) return
+
+    if (selectedGovernorateFeature) {
+      map.getTargetElement().style.cursor = 'pointer'
+      return
+    }
+
+    let hoveredFeature = null
+
+    map.forEachFeatureAtPixel(
+      event.pixel,
+      (feature, layer) => {
+        if (layer === governoratesLayer) {
+          hoveredFeature = feature
+          return true
+        }
+
+        return false
+      },
+      {
+        hitTolerance: 3,
+      },
+    )
+
+    if (
+      hoveredGovernorateFeature &&
+      hoveredGovernorateFeature !== hoveredFeature
+    ) {
+      hoveredGovernorateFeature.setStyle(defaultGovernorateStyle)
+    }
+
+    hoveredGovernorateFeature = hoveredFeature
+
+    if (!hoveredFeature) {
+      map.getTargetElement().style.cursor = ''
+      lastHoveredGovernorateName = null
+      return
+    }
+
     map.getTargetElement().style.cursor = 'pointer'
-    return
-  }
+    hoveredFeature.setStyle(hoverGovernorateStyle)
 
-  let hoveredFeature = null
+    const govName = getGovernorateName(hoveredFeature)
 
-  map.forEachFeatureAtPixel(
-    event.pixel,
-    (feature, layer) => {
-      if (layer === governoratesLayer) {
-        hoveredFeature = feature
-        return true
-      }
+    if (govName === lastHoveredGovernorateName) return
 
-      return false
-    },
-    {
-      hitTolerance: 3,
-    },
-  )
+    lastHoveredGovernorateName = govName
 
-  if (
-    hoveredGovernorateFeature &&
-    hoveredGovernorateFeature !== hoveredFeature
-  ) {
-    hoveredGovernorateFeature.setStyle(defaultGovernorateStyle)
-  }
+    const city = findCityByGovernorateName(govName)
 
-  hoveredGovernorateFeature = hoveredFeature
-
-  if (!hoveredFeature) {
-    map.getTargetElement().style.cursor = ''
-    lastHoveredGovernorateName = null
-    return
-  }
-
-  map.getTargetElement().style.cursor = 'pointer'
-  hoveredFeature.setStyle(hoverGovernorateStyle)
-
-  const govName = getGovernorateName(hoveredFeature)
-
-  if (govName === lastHoveredGovernorateName) return
-
-  lastHoveredGovernorateName = govName
-
-  const city = findCityByGovernorateName(govName)
-
-  if (city) {
-    emit('select-city', city)
-  }
+    if (city) {
+      emit('select-city', city)
+    }
   })
 
   void resolveOwmAppId()
@@ -427,6 +447,7 @@ watch(
     }
   },
 )
+
 function selectCityFromSearch(city) {
   if (!map) return
 
@@ -440,15 +461,13 @@ function selectCityFromSearch(city) {
 
   selectGovernorate(matchedFeature)
 }
+
 defineExpose({
   selectCityFromSearch,
 })
 
-
 const activeLayer = ref('none')
 let weatherLayer = null
-
-/** يُحمّل من الباكند عند غياب VITE_OPENWEATHER_API_KEY؛ يُخزَّن فقط عند نجاح المفتاح */
 let owmAppIdCache = ''
 
 async function resolveOwmAppId() {
@@ -456,16 +475,20 @@ async function resolveOwmAppId() {
   if (fromEnv && String(fromEnv).trim()) {
     return String(fromEnv).trim()
   }
+
   if (owmAppIdCache) {
     return owmAppIdCache
   }
+
   try {
     const response = await fetch(apiUrl('/api/config/weather-map'))
     const data = response.ok ? await response.json() : {}
     const key = data?.apiKey != null ? String(data.apiKey).trim() : ''
+
     if (key) {
       owmAppIdCache = key
     }
+
     return key
   } catch {
     return ''
@@ -488,6 +511,7 @@ const handleLayerChange = async (layerType) => {
   if (layerType === 'none') return
 
   const appId = await resolveOwmAppId()
+
   if (!appId) {
     console.warn(
       'لا يوجد مفتاح OpenWeather: ضع OPENWEATHER_API_KEY في .env للباكند أو VITE_OPENWEATHER_API_KEY للفرونت، وتأكد أن الباكند يعمل.',
@@ -513,11 +537,13 @@ onUnmounted(() => {
     map.removeLayer(weatherLayer)
     weatherLayer = null
   }
+
   if (map) {
     map.setTarget(undefined)
     map.dispose()
     map = null
   }
+
   selectedGovernorateFeature = null
   hoveredGovernorateFeature = null
   lastHoveredGovernorateName = null
@@ -526,7 +552,7 @@ onUnmounted(() => {
 
 <style scoped>
 .map-wrapper {
-  position: relative; 
+  position: relative;
   width: 100%;
   height: 85vh;
 }
@@ -535,6 +561,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
 }
+
 .fixed-points-btn {
   position: absolute;
   top: 16px;
@@ -556,15 +583,16 @@ onUnmounted(() => {
 
 .point-popup {
   position: absolute;
-  z-index: 21;
+  z-index: 9999;
   width: 230px;
   border-radius: 18px;
   padding: 14px;
   background: white;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
   direction: rtl;
-  transform: translate(-50%, calc(-100% - 18px));
   text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 18px));
 }
 
 .point-popup h3 {

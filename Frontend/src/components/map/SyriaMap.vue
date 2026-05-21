@@ -11,28 +11,72 @@
 
     <div id="map" ref="mapElement"></div>
 
+    <!-- مقياس الطبقات -->
+    <div
+      v-if="activeLayer !== 'none' && currentLegendConfig"
+      class="weather-legend"
+      dir="rtl"
+    >
+      <div class="legend-header">
+        <span>
+          {{ currentLegendConfig.icon }}
+          {{ currentLegendConfig.title }}
+        </span>
+      </div>
+
+      <div
+        class="legend-scale"
+        :style="{ background: currentLegendConfig.gradient }"
+      ></div>
+
+      <div class="legend-values">
+        <span
+          v-for="value in currentLegendConfig.values"
+          :key="value"
+        >
+          {{ value }}
+        </span>
+      </div>
+
+      <div class="legend-unit">
+        {{ currentLegendConfig.unit }}
+      </div>
+    </div>
+
+    <!-- نافذة النقاط -->
     <div
       v-if="fixedPointsMode && selectedFixedPoint"
       class="point-popup"
       :style="fixedPointPopupStyle"
     >
       <h3>{{ selectedFixedPoint.name }}</h3>
+
       <p>خط الطول: {{ selectedFixedPoint.lon }}</p>
-<p>خط العرض: {{ selectedFixedPoint.lat }}</p>
 
-<p v-if="selectedFixedPoint.loading">جاري تحميل الطقس...</p>
+      <p>خط العرض: {{ selectedFixedPoint.lat }}</p>
 
-<template v-else-if="selectedFixedPoint.weather">
- الحرارة: {{ selectedFixedPoint.weather.temp }}°C
-  <p>سرعة الرياح: {{ selectedFixedPoint.weather.windSpeed }} م/ث</p>
-</template>
+      <p v-if="selectedFixedPoint.loading">
+        جاري تحميل الطقس...
+      </p>
 
-<p v-else class="weather-error">تعذر تحميل بيانات الطقس</p>
-   
+      <template v-else-if="selectedFixedPoint.weather">
+        <p>
+          الحرارة:
+          {{ selectedFixedPoint.weather.temp }}°C
+        </p>
+
+        <p>
+          سرعة الرياح:
+          {{ selectedFixedPoint.weather.windSpeed }} م/ث
+        </p>
+      </template>
+
+      <p v-else class="weather-error">
+        تعذر تحميل بيانات الطقس
+      </p>
     </div>
   </div>
 </template>
-
 <script setup>
 import 'ol/ol.css'
 import Map from 'ol/Map'
@@ -47,9 +91,9 @@ import XYZ from 'ol/source/XYZ'
 import { fromLonLat } from 'ol/proj'
 import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
-import { ref, onMounted, onUnmounted, watch } from 'vue'
 import LayerControl from '@/components/map/LayerControl.vue'
 import { apiUrl } from '@/config/api.js'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 
 const props = defineProps({
   selectedCity: {
@@ -515,6 +559,66 @@ defineExpose({
 })
 
 const activeLayer = ref('none')
+
+const legendConfigs = {
+  temp_new: {
+    icon: '🌡️',
+    title: 'مقياس الحرارة',
+    unit: '°C',
+    values: [-20, -10, 0, 10, 20, 30, 40],
+    gradient:
+      'linear-gradient(90deg, #6b4cc2, #3f8cff, #4fd1c5, #8bc34a, #ffe600, #ff9800, #f44336)',
+  },
+
+  precipitation_new: {
+    icon: '🌧️',
+    title: 'مقياس الهطول',
+    unit: 'mm',
+    values: [0, 1, 5, 10, 20, 50, 100],
+    gradient:
+      'linear-gradient(90deg, #dff6ff, #8bd3ff, #3b9cff, #0066ff, #7b2cff, #ff4fd8, #ffffff)',
+  },
+
+  wind_new: {
+    icon: '💨',
+    title: 'مقياس الرياح',
+    unit: 'm/s',
+    values: [0, 2, 5, 10, 15, 25, 35],
+    gradient:
+      'linear-gradient(90deg, #e0f7fa, #80deea, #26c6da, #00acc1, #00838f, #006064, #4a148c)',
+  },
+
+  clouds_new: {
+    icon: '☁️',
+    title: 'مقياس الغيوم',
+    unit: '%',
+    values: [0, 20, 40, 60, 80, 100],
+    gradient:
+      'linear-gradient(90deg, #ffffff, #eeeeee, #cfd8dc, #90a4ae, #607d8b, #263238)',
+  },
+
+  pressure_new: {
+    icon: '🧭',
+    title: 'مقياس الضغط الجوي',
+    unit: 'hPa',
+    values: [960, 980, 1000, 1010, 1020, 1040],
+    gradient:
+      'linear-gradient(90deg, #311b92, #512da8, #1976d2, #26c6da, #ffee58, #ef5350)',
+  },
+
+  snow_new: {
+    icon: '❄️',
+    title: 'مقياس الثلوج',
+    unit: 'mm',
+    values: [0, 1, 5, 10, 20, 50],
+    gradient:
+      'linear-gradient(90deg, #ffffff, #e0f2fe, #bae6fd, #7dd3fc, #38bdf8, #2563eb)',
+  },
+}
+
+const currentLegendConfig = computed(() => {
+  return legendConfigs[activeLayer.value] || null
+})
 let weatherLayer = null
 let owmAppIdCache = ''
 
@@ -660,5 +764,57 @@ onUnmounted(() => {
 }
 .weather-error {
   color: #e53935;
+}
+.weather-legend {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5000;
+  width: 330px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+  direction: rtl;
+}
+
+.legend-header {
+  margin-bottom: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.legend-scale {
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.legend-values {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #263238;
+  direction: ltr;
+}
+
+.legend-unit {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #607d8b;
+}
+
+@media (max-width: 720px) {
+  .weather-legend {
+    right: 10px;
+    left: 10px;
+    bottom: 10px;
+    width: auto;
+  }
 }
 </style>

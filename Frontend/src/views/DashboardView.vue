@@ -69,7 +69,10 @@
       ref="syriaMapRef"
       :cities="cities"
       :selected-city="selectedCity"
+      :forecast="forecast"
       @select-city="handleSelectCity"
+      @city-forecast="handleCityForecast"
+      @forecast-mode="handleMapForecastMode"
     />
 
     <WeatherCard
@@ -80,6 +83,12 @@
       :error="weatherError"
       @close="closeCard"
     />
+
+    <ForecastCard
+      v-if="forecast && forecast.length && !mapForecastOpen"
+      :city="selectedCity"
+      :forecast="forecast"
+    />
   </div>
 </template>
 
@@ -88,6 +97,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import SyriaMap from '@/components/map/SyriaMap.vue'
 import WeatherCard from '@/components/map/WeatherCard.vue'
+import ForecastCard from '@/components/map/ForecastCard.vue'
 import { apiUrl } from '@/config/api.js'
 import { fetchCities } from '@/api/cities.js'
 
@@ -98,7 +108,11 @@ const citiesLoadError = ref(null)
 const selectedCity = ref(null)
 const weather = ref(null)
 const weatherError = ref(null)
+const forecast = ref(null)
+const forecastError = ref(null)
 const loadingWeather = ref(false)
+const loadingForecast = ref(false)
+const mapForecastOpen = ref(false)
 const searchText = ref('')
 const syriaMapRef = ref(null)
 const systemStatus = ref('checking')
@@ -148,17 +162,22 @@ async function loadCities() {
   }
 }
 
-async function handleSelectCity(city) {
+async function handleSelectCity(payload) {
+  const city = payload?.city || payload
   selectedCity.value = city
   weather.value = null
   weatherError.value = null
+  forecast.value = payload?.forecast ?? null
+  forecastError.value = null
 
   if (!city?.id) {
     loadingWeather.value = false
+    loadingForecast.value = false
     return
   }
 
   loadingWeather.value = true
+  loadingForecast.value = !Boolean(forecast.value)
 
   try {
     const response = await fetch(apiUrl(`/api/weather/${city.id}`))
@@ -167,12 +186,11 @@ async function handleSelectCity(city) {
     if (!response.ok) {
       weather.value = null
       weatherError.value = parseWeatherError(result)
-      return
-    }
-
-    weather.value = result.data ?? null
-    if (!weather.value) {
-      weatherError.value = 'لا توجد بيانات طقس'
+    } else {
+      weather.value = result.data ?? null
+      if (!weather.value) {
+        weatherError.value = 'لا توجد بيانات طقس'
+      }
     }
   } catch (error) {
     console.error('Weather fetch error:', error)
@@ -180,6 +198,48 @@ async function handleSelectCity(city) {
     weatherError.value = 'خطأ في الاتصال بالخادم'
   } finally {
     loadingWeather.value = false
+  }
+
+  if (!forecast.value && city?.lat != null && city?.lon != null) {
+    await loadForecast(city.lat, city.lon)
+  }
+}
+
+async function handleCityForecast(payload) {
+  forecast.value = payload?.forecast ?? null
+  forecastError.value = null
+}
+
+function handleMapForecastMode(isOpen) {
+  mapForecastOpen.value = Boolean(isOpen)
+}
+
+async function loadForecast(lat, lon) {
+  loadingForecast.value = true
+  forecastError.value = null
+
+  try {
+    const response = await fetch(
+      apiUrl(`/api/weather/forecast?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`),
+    )
+    const result = await response.json()
+
+    if (!response.ok) {
+      forecast.value = null
+      forecastError.value = parseWeatherError(result)
+      return
+    }
+
+    forecast.value = result.forecast ?? null
+    if (!forecast.value || !forecast.value.length) {
+      forecastError.value = 'تعذر الحصول على توقعات الطقس'
+    }
+  } catch (error) {
+    console.error('Forecast fetch error:', error)
+    forecast.value = null
+    forecastError.value = 'خطأ في الاتصال بخادم التوقعات'
+  } finally {
+    loadingForecast.value = false
   }
 }
 

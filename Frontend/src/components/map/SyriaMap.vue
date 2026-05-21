@@ -1,15 +1,47 @@
 <template>
   <div class="map-wrapper">
     <LayerControl
+      v-if="!forecastMode"
       :activeLayer="activeLayer"
       @change-layer="handleLayerChange"
     />
 
-    <button class="fixed-points-btn" @click="toggleFixedPointsMode">
+    <button class="fixed-points-btn" v-if="!forecastMode" @click="toggleFixedPointsMode">
       {{ fixedPointsMode ? 'رجوع للوضع الطبيعي' : 'عرض نقاط الإحداثيات' }}
     </button>
 
+    <button class="forecast-toggle-btn" @click="toggleForecastMode">
+      {{ forecastMode ? 'إغلاق التوقعات' : 'عرض توقعات الطقس' }}
+    </button>
+
     <div id="map" ref="mapElement"></div>
+
+    <div v-if="forecastMode" class="forecast-bottom-panel">
+      <button class="forecast-close-btn" type="button" @click="toggleForecastMode">×</button>
+      <div class="forecast-panel-header">
+        <div>
+          <strong>توقعات الطقس</strong>
+          <div class="forecast-city-label">
+            {{ selectedCity ? (selectedCity.name || selectedCity.name_ar || selectedCity.name_en || 'محافظة') : 'اختر محافظة' }}
+          </div>
+        </div>
+      </div>
+
+      <div v-if="forecastItems.length" class="forecast-scroll-row" role="list">
+        <div v-for="day in forecastItems" :key="day.date" class="forecast-item" role="listitem">
+          <div class="item-day">{{ getDayLabel(day.date) }}</div>
+          <div class="item-icon">{{ getWeatherIcon(day.weather_code) }}</div>
+          <div class="item-temps">
+            <span class="temp-max">{{ day.max_temp }}°</span>
+            <span class="temp-min">{{ day.min_temp }}°</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="forecast-empty">
+        {{ selectedCity ? 'لم يتم تحميل التوقعات بعد.' : 'اختر محافظة أولاً لعرض التوقعات.' }}
+      </div>
+    </div>
 
     <div
       v-if="fixedPointsMode && selectedFixedPoint"
@@ -47,7 +79,7 @@ import XYZ from 'ol/source/XYZ'
 import { fromLonLat } from 'ol/proj'
 import { Style, Circle, Fill, Stroke } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import LayerControl from '@/components/map/LayerControl.vue'
 import { apiUrl } from '@/config/api.js'
 
@@ -60,13 +92,19 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  forecast: {
+    type: Array,
+    default: () => [],
+  },
 })
 
-const emit = defineEmits(['select-city'])
+const emit = defineEmits(['select-city', 'city-forecast', 'forecast-mode'])
 
 const fixedPointsMode = ref(false)
+const forecastMode = ref(false)
 const selectedFixedPoint = ref(null)
 const fixedPointPopupStyle = ref({})
+const forecastItems = computed(() => props.forecast || [])
 
 let selectedFixedPointCoordinate = null
 let fixedPointsLayer = null
@@ -159,6 +197,57 @@ function findCityByGovernorateName(govName) {
   })
 }
 
+function getDayLabel(dateString) {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('ar-EG', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'numeric',
+  })
+}
+
+function getWeatherIcon(code) {
+  if (code == null) return '🌤️'
+  if (code === 0) return '☀️'
+  if (code === 1 || code === 2) return '⛅'
+  if (code === 3) return '☁️'
+  if (code >= 45 && code <= 48) return '🌫️'
+  if (code >= 51 && code <= 57) return '🌦️'
+  if (code >= 61 && code <= 65) return '🌧️'
+  if (code >= 66 && code <= 67) return '🌨️'
+  if (code >= 71 && code <= 77) return '❄️'
+  if (code >= 80 && code <= 82) return '🌧️'
+  if (code >= 95) return '⛈️'
+  return '🌤️'
+}
+
+function toggleForecastMode() {
+  forecastMode.value = !forecastMode.value
+  if (forecastMode.value) {
+    fixedPointsMode.value = false
+  }
+  emit('forecast-mode', forecastMode.value)
+}
+
+async function loadForecastForLocation(lat, lon) {
+  try {
+    const response = await fetch(
+      apiUrl(`/api/weather/forecast?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`),
+    )
+
+    if (!response.ok) {
+      return null
+    }
+
+    const result = await response.json()
+    return result.forecast ?? null
+  } catch (error) {
+    console.error('Forecast fetch error:', error)
+    return null
+  }
+}
+
 function clearSelectedGovernorate(shouldEmit = false) {
   if (selectedGovernorateFeature) {
     selectedGovernorateFeature.setStyle(defaultGovernorateStyle)
@@ -170,7 +259,7 @@ function clearSelectedGovernorate(shouldEmit = false) {
   }
 }
 
-function selectGovernorate(feature) {
+async function selectGovernorate(feature) {
   clearSelectedGovernorate()
 
   selectedGovernorateFeature = feature
@@ -181,6 +270,8 @@ function selectGovernorate(feature) {
 
   if (city) {
     emit('select-city', city)
+    const forecast = await loadForecastForLocation(city.lat, city.lon)
+    emit('city-forecast', { city, forecast })
   } else {
     emit('select-city', {
       name: govName,
@@ -243,6 +334,7 @@ function toggleFixedPointsMode() {
   selectedFixedPoint.value = null
   selectedFixedPointCoordinate = null
   fixedPointPopupStyle.value = {}
+  forecastMode.value = false
 
   if (!map) return
 
@@ -603,6 +695,189 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 85vh;
+}
+
+.forecast-toggle-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  border: none;
+  border-radius: 14px;
+  padding: 10px 16px;
+  background: #f57c00;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.forecast-toggle-btn:hover {
+  background: #ef6c00;
+}
+
+.forecast-bottom-panel {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2100;
+  width: min(90%, 760px);
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 20px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+  padding: 14px 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.forecast-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.forecast-panel-header strong {
+  color: #1d4ed8;
+  font-size: 15px;
+}
+
+.forecast-city-label {
+  color: #475569;
+  font-size: 13px;
+}
+
+.forecast-scroll-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.forecast-scroll-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.forecast-scroll-row::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 999px;
+}
+
+.forecast-item {
+  min-width: 100px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  padding: 10px 12px;
+  text-align: right;
+  color: #0f172a;
+}
+
+.item-day {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.item-icon {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.item-temps {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.temp-max {
+  color: #dc2626;
+}
+
+.temp-min {
+  color: #2563eb;
+}
+
+.forecast-empty {
+  color: #475569;
+  font-size: 14px;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.forecast-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.forecast-grid-day {
+  background: #f8fafc;
+  border: 1px solid rgba(59, 130, 246, 0.14);
+  border-radius: 18px;
+  padding: 16px;
+  text-align: right;
+}
+
+.day-label {
+  margin-bottom: 10px;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.day-icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+
+.day-desc {
+  color: #334155;
+  margin-bottom: 12px;
+}
+
+.day-temps {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.max {
+  color: #b91c1c;
+}
+
+.min {
+  color: #1d4ed8;
+}
+
+.forecast-empty {
+  margin: 0;
+  color: #475569;
+  text-align: center;
+  font-weight: 600;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
 }
 
 #map {

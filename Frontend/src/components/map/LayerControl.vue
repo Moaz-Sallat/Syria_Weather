@@ -35,36 +35,42 @@ function selectLayer(id) {
 <style scoped>
 .layer-control {
   position: absolute;
-  bottom: 24px;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2000;
   display: flex;
-  flex-direction: row;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  max-width: 92%;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 8px 10px;
+  max-width: 96%;
+  min-width: 320px;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 10px 12px;
   border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
-  border: 1px solid #ddd;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.09);
 }
 
 button {
-  padding: 6px 12px;
+  padding: 8px 10px;
   cursor: pointer;
   border: none;
-  border-radius: 20px;
-  background: transparent;
-  font-size: 13px;
+  border-radius: 999px;
+  background: rgba(250, 250, 250, 0.95);
+  font-size: 12px;
+  min-width: 92px;
   font-weight: 700;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s, transform 0.2s;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+}
+
+button:hover {
+  transform: translateY(-1px);
 }
 
 .icon {

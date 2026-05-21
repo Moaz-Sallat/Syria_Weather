@@ -155,6 +155,64 @@ def get_cities_geojson():
         conn.close()
 
 
+@app.get("/api/weather/forecast")
+def get_weather_forecast(lat: float, lon: float):
+    """جلب توقع الطقس لسبعة أيام من Open-Meteo بناءً على الإحداثيات."""
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": "weathercode,temperature_2m_max,temperature_2m_min,windspeed_10m_max,precipitation_sum",
+        "timezone": "auto",
+        "forecast_days": 7,
+    }
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Forecast API Error: {data.get('reason') or data.get('error') or data}",
+            )
+
+        daily = data.get("daily", {})
+        forecast = []
+
+        times = daily.get("time", [])
+        highs = daily.get("temperature_2m_max", [])
+        lows = daily.get("temperature_2m_min", [])
+        winds = daily.get("windspeed_10m_max", [])
+        precipitation = daily.get("precipitation_sum", [])
+        weather_codes = daily.get("weathercode", [])
+
+        for index, date_value in enumerate(times):
+            forecast.append(
+                {
+                    "date": date_value,
+                    "description": translate_open_meteo_code(int(weather_codes[index])) if index < len(weather_codes) else "غير متوفر",
+                    "max_temp": float(highs[index]) if index < len(highs) else None,
+                    "min_temp": float(lows[index]) if index < len(lows) else None,
+                    "wind_speed": float(winds[index]) if index < len(winds) else None,
+                    "precipitation": float(precipitation[index]) if index < len(precipitation) else None,
+                    "weather_code": int(weather_codes[index]) if index < len(weather_codes) else None,
+                }
+            )
+
+        return {
+            "source": "open-meteo",
+            "latitude": lat,
+            "longitude": lon,
+            "forecast": forecast,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Forecast Error: {e}")
+        raise HTTPException(status_code=500, detail="تعذر جلب توقعات الطقس")
+
+
 @app.get("/api/weather/{city_id}")
 def get_weather(city_id: int):
     conn = get_db_connection()
@@ -232,4 +290,40 @@ def get_weather(city_id: int):
     finally:
         cur.close()
         conn.close()
+
+
+WEATHER_CODE_TRANSLATIONS = {
+    0: "صافي",
+    1: "مشمس جزئي",
+    2: "غائم جزئي",
+    3: "غائم",
+    45: "ضباب",
+    48: "ضباب متجمد",
+    51: "رذاذ خفيف",
+    53: "رذاذ",
+    55: "رذاذ كثيف",
+    56: "رذاذ مثلج خفيف",
+    57: "رذاذ مثلج كثيف",
+    61: "مطر خفيف",
+    63: "مطر",
+    65: "مطر غزير",
+    66: "مطر ثلجي خفيف",
+    67: "مطر ثلجي كثيف",
+    71: "ثلج خفيف",
+    73: "ثلج",
+    75: "ثلج غزير",
+    77: "ثلوج ناعمة",
+    80: "زخات مطر خفيفة",
+    81: "زخات مطر",
+    82: "زخات مطر غزيرة",
+    85: "ثلج خفيف",
+    86: "ثلج كثيف",
+    95: "عاصفة رعدية",
+    96: "عاصفة رعدية مع برد خفيف",
+    99: "عاصفة رعدية مع برد كثيف",
+}
+
+
+def translate_open_meteo_code(code):
+    return WEATHER_CODE_TRANSLATIONS.get(code, "حالة جوية غير معروفة")
     

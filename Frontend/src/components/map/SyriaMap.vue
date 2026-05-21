@@ -16,30 +16,32 @@
 
     <div id="map" ref="mapElement"></div>
 
-    <div v-if="forecastMode" class="forecast-bottom-panel">
-      <button class="forecast-close-btn" type="button" @click="toggleForecastMode">×</button>
-      <div class="forecast-panel-header">
-        <div>
-          <strong>توقعات الطقس</strong>
-          <div class="forecast-city-label">
-            {{ selectedCity ? (selectedCity.name || selectedCity.name_ar || selectedCity.name_en || 'محافظة') : 'اختر محافظة' }}
+    <div v-if="forecastMode" class="forecast-mini-panel">
+      <div class="forecast-mini-card">
+        <div class="forecast-mini-header">
+          <div>
+            <span class="mini-title">توقعات</span>
+            <div class="mini-city">
+              {{ selectedCity ? (selectedCity.name || selectedCity.name_ar || selectedCity.name_en || 'محافظة') : 'اختر محافظة' }}
+            </div>
+          </div>
+          <button class="forecast-mini-close" type="button" @click="toggleForecastMode">×</button>
+        </div>
+
+        <div v-if="forecastItems.length" class="forecast-mini-row" role="list">
+          <div v-for="day in forecastItems" :key="day.date" class="forecast-mini-item" role="listitem">
+            <div class="mini-day">{{ getDayLabel(day.date) }}</div>
+            <div class="mini-icon">{{ getWeatherIcon(day.weather_code) }}</div>
+            <div class="mini-temps">
+              <span class="mini-max">{{ day.max_temp }}°</span>
+              <span class="mini-min">{{ day.min_temp }}°</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div v-if="forecastItems.length" class="forecast-scroll-row" role="list">
-        <div v-for="day in forecastItems" :key="day.date" class="forecast-item" role="listitem">
-          <div class="item-day">{{ getDayLabel(day.date) }}</div>
-          <div class="item-icon">{{ getWeatherIcon(day.weather_code) }}</div>
-          <div class="item-temps">
-            <span class="temp-max">{{ day.max_temp }}°</span>
-            <span class="temp-min">{{ day.min_temp }}°</span>
-          </div>
+        <div v-else class="forecast-empty mini-empty">
+          {{ selectedCity ? 'لم يتم تحميل التوقعات بعد.' : 'اختر محافظة أولاً' }}
         </div>
-      </div>
-
-      <div v-else class="forecast-empty">
-        {{ selectedCity ? 'لم يتم تحميل التوقعات بعد.' : 'اختر محافظة أولاً لعرض التوقعات.' }}
       </div>
     </div>
 
@@ -715,6 +717,81 @@ onUnmounted(() => {
 .forecast-toggle-btn:hover {
   background: #ef6c00;
 }
+
+/* Mini forecast panel (bottom-left) */
+.forecast-mini-panel {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  z-index: 2200;
+  width: min(92%, 380px);
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  padding: 8px;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  direction: rtl;
+}
+
+.forecast-mini-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.forecast-mini-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-title {
+  font-weight: 800;
+  color: #1d4ed8;
+  font-size: 14px;
+}
+
+.mini-city {
+  color: #475569;
+  font-size: 12px;
+}
+
+.forecast-mini-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  color: #334155;
+}
+
+.forecast-mini-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 2px;
+}
+
+.forecast-mini-item {
+  min-width: 88px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  padding: 8px 10px;
+  text-align: right;
+  color: #0f172a;
+}
+
+.mini-day { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.mini-icon { font-size: 16px; margin-bottom: 6px; }
+.mini-temps { display:flex; justify-content:space-between; gap:6px; font-weight:700; color:#1e3a8a }
+.mini-max { color: #dc2626 }
+.mini-min { color: #2563eb }
+
 
 .forecast-bottom-panel {
   position: absolute;

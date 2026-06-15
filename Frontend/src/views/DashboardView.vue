@@ -64,22 +64,31 @@
       لا توجد محافظات في قاعدة البيانات.
     </div>
 
-    <SyriaMap
-      v-else
-      ref="syriaMapRef"
-      :cities="cities"
-      :selected-city="selectedCity"
-      @select-city="handleSelectCity"
-    />
-
-    <WeatherCard
-      v-if="selectedCity"
-      :city="selectedCity"
-      :weather="weather"
-      :loading="loadingWeather"
-      :error="weatherError"
-      @close="closeCard"
-    />
+<SyriaMap
+  v-else
+  ref="syriaMapRef"
+  :cities="cities"
+  :selected-city="selectedCity"
+  :hide-layer-control="showForecastPanel"
+  @select-city="handleSelectCity"
+/>
+ <WeatherCard
+  v-if="selectedCity"
+  :city="selectedCity"
+  :weather="weather"
+  :loading="loadingWeather"
+  :error="weatherError"
+  @close="closeCard"
+  @show-forecast="loadForecast"
+/>
+<ForecastPanel
+  v-if="showForecastPanel && selectedCity"
+  :city="selectedCity"
+  :forecast="forecastDays"
+  :loading="forecastLoading"
+  :error="forecastError"
+  @close="closeForecast"
+/>
   </div>
 </template>
 
@@ -90,6 +99,8 @@ import SyriaMap from '@/components/map/SyriaMap.vue'
 import WeatherCard from '@/components/map/WeatherCard.vue'
 import { apiUrl } from '@/config/api.js'
 import { fetchCities } from '@/api/cities.js'
+import ForecastPanel from '@/components/map/ForecastPanel.vue'
+import { fetchWeeklyForecast } from '@/api/weather.js'
 
 const cities = ref([])
 const citiesLoading = ref(true)
@@ -102,7 +113,10 @@ const loadingWeather = ref(false)
 const searchText = ref('')
 const syriaMapRef = ref(null)
 const systemStatus = ref('checking')
-
+const forecastDays = ref([])
+const forecastLoading = ref(false)
+const forecastError = ref(null)
+const showForecastPanel = ref(false)
 let healthPollId = null
 
 const filteredCities = computed(() => {
@@ -110,7 +124,43 @@ const filteredCities = computed(() => {
   if (!value) return []
   return cities.value.filter((city) => city.name.includes(value))
 })
+function resetForecast() {
+  forecastDays.value = []
+  forecastError.value = null
+  forecastLoading.value = false
+  showForecastPanel.value = false
+}
 
+async function loadForecast() {
+  if (!selectedCity.value?.id) {
+    forecastError.value = 'اختر محافظة أولاً'
+    showForecastPanel.value = true
+    return
+  }
+
+  showForecastPanel.value = true
+  forecastLoading.value = true
+  forecastError.value = null
+  forecastDays.value = []
+
+  try {
+    forecastDays.value = await fetchWeeklyForecast(selectedCity.value.id)
+
+    if (!forecastDays.value.length) {
+      forecastError.value = 'لا توجد توقعات متاحة لهذه المحافظة'
+    }
+  } catch (error) {
+    console.error('Forecast fetch error:', error)
+    forecastError.value =
+      error instanceof Error ? error.message : 'خطأ في تحميل توقعات الطقس'
+  } finally {
+    forecastLoading.value = false
+  }
+}
+
+function closeForecast() {
+  resetForecast()
+}
 function parseWeatherError(data) {
   const detail = data?.detail
   if (Array.isArray(detail)) {
@@ -152,6 +202,7 @@ async function handleSelectCity(city) {
   selectedCity.value = city
   weather.value = null
   weatherError.value = null
+  resetForecast()
 
   if (!city?.id) {
     loadingWeather.value = false
@@ -193,6 +244,7 @@ function closeCard() {
   selectedCity.value = null
   weather.value = null
   weatherError.value = null
+  resetForecast()
 }
 
 onMounted(() => {

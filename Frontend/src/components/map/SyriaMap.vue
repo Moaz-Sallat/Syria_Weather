@@ -1,9 +1,10 @@
 <template>
   <div class="map-wrapper">
-    <LayerControl
-      :activeLayer="activeLayer"
-      @change-layer="handleLayerChange"
-    />
+<LayerControl
+  v-if="!hideLayerControl"
+  :activeLayer="activeLayer"
+  @change-layer="handleLayerChange"
+/>
 
     <button class="fixed-points-btn" @click="toggleFixedPointsMode">
       {{ fixedPointsMode ? 'رجوع للوضع الطبيعي' : 'عرض نقاط الإحداثيات' }}
@@ -78,6 +79,7 @@
   </div>
 </template>
 <script setup>
+
 import 'ol/ol.css'
 import Map from 'ol/Map'
 import View from 'ol/View'
@@ -103,6 +105,10 @@ const props = defineProps({
   cities: {
     type: Array,
     required: true,
+  },
+  hideLayerControl: {
+    type: Boolean,
+    default: false,
   },
 })
 

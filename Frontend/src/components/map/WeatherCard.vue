@@ -33,6 +33,14 @@
     <div v-else class="weather-placeholder muted">
       لا توجد بيانات طقس
     </div>
+    <button
+  class="forecast-btn"
+  type="button"
+  :disabled="loading || !city?.id"
+  @click="$emit('show-forecast')"
+>
+  عرض توقعات الأسبوع
+</button>
   </div>
 </template>
 
@@ -56,7 +64,7 @@ defineProps({
   },
 })
 
-defineEmits(['close'])
+defineEmits(['close', 'show-forecast'])
 </script>
 
 <style scoped>
@@ -139,5 +147,28 @@ defineEmits(['close'])
     opacity: 1;
     transform: translateX(0);
   }
+}
+.forecast-btn {
+  width: 100%;
+  margin-top: 14px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #1e88e5, #1565c0);
+  color: white;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.forecast-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(30, 136, 229, 0.28);
+}
+
+.forecast-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
